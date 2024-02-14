@@ -14,6 +14,8 @@ fn main() {
 
 const PUZZLE_SIZE: usize = 10;
 const SIGIL_SIZE: f32 = 50.0;
+const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
+const SIGIL_OFFSET: f32 = SIGIL_DISTANCE * PUZZLE_SIZE as f32 / 2.0 - SIGIL_DISTANCE / 2.0;
 
 #[derive(Copy, Clone)]
 struct Sigil {
@@ -23,7 +25,10 @@ struct Sigil {
 impl Sigil {
     fn sprite(&self, x: usize, y: usize) -> Sprite {
         Sprite {
-            position: [x as f32, y as f32],
+            position: [
+                x as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
+                y as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
+            ],
             size: [SIGIL_SIZE, SIGIL_SIZE],
             texture_coordinate: self.texture_coordinate(),
         }
@@ -54,7 +59,7 @@ struct Puzzle {
 impl Default for Puzzle {
     fn default() -> Self {
         Self {
-            sigils: [[None; PUZZLE_SIZE]; PUZZLE_SIZE],
+            sigils: [[Some(Sigil { active: false }); PUZZLE_SIZE]; PUZZLE_SIZE],
         }
     }
 }
