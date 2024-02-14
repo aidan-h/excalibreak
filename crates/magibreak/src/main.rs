@@ -93,13 +93,7 @@ async fn game() {
     );
 
     event_loop.run(move |event, _, control_flow| {
-        let consumed = if let Some(response) = ui.handle_event(&event, renderer.window.id()) {
-            response.consumed
-        } else {
-            false
-        };
-
-        input.handle_event(&event, consumed);
+        input.handle_event(&event, ui.handle_event(&event, renderer.window.id()));
 
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
             let mouse_coordinate = if let Some(mouse_position) = input.mouse_position {

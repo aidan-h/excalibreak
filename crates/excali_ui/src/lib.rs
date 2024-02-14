@@ -30,16 +30,16 @@ impl UI {
         &mut self,
         event: &Event<()>,
         id: WindowId,
-    ) -> Option<egui_winit::EventResponse> {
+    ) -> bool {
         match event {
             Event::WindowEvent { window_id, event } => {
                 if *window_id != id {
-                    None
+                    false
                 } else {
-                    Some(self.winit_state.on_event(&self.context, event))
+                    self.winit_state.on_event(&self.context, event).consumed
                 }
             }
-            _ => None,
+            _ => false,
         }
     }
 
