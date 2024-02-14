@@ -102,6 +102,7 @@ impl TextureCoordinate {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Transform {
     pub position: Vector2<f32>,
     pub rotation: f32,

@@ -19,9 +19,7 @@ uppercase = !lowercase;
 ## Shape
 defines lines
 - circle = plain
-- triangle = no entering
 - square = can cross
-- pentagon = all entering changes their endpoint to exiting
 - hexagon = exiting disconnects from hexagon & connects to all entering hexagon
 
 ## Aura
@@ -29,3 +27,4 @@ defines cursors
 - circle = clones
 - triangle = destroys
 - square = toggles case
+- ? = can't target

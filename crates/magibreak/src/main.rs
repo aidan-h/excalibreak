@@ -26,53 +26,104 @@ const CURSOR_SIZE: f32 = 70.0;
 const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
 
 #[derive(Copy, Clone)]
+enum Orb {
+    Circle,
+    Diamond,
+    Octogon,
+}
+
+impl Orb {
+    fn allow_intersections(&self) -> bool {
+        !matches!(self, Self::Circle)
+    }
+
+    fn texture_coordinate(&self, active: bool) -> TextureCoordinate {
+        let x = if active { 0.5 } else { 0.0 };
+        let y = match self {
+            Self::Octogon => 2.0 / 3.0,
+            Self::Diamond => 1.0 / 3.0,
+            Self::Circle => 0.0,
+        };
+        TextureCoordinate {
+            width: 0.5,
+            height: 1.0 / 3.0,
+            x,
+            y,
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
 enum Sigil {
     Alpha,
+    Sigma,
 }
 
 impl Sigil {
-    fn sprite(&self, coordinate: SigilCoordinate, lines: &[Line]) -> Sprite {
-        Sprite {
-            transform: Transform {
-                position: coordinate.position(),
-                rotation: 0.0,
-                scale: SIGIL_SCALE,
-            },
-            texture_coordinate: self.texture_coordinate(coordinate, lines),
-        }
-    }
-
-    fn allow_intersections(&self) -> bool {
-        false
-    }
-
     fn active(&self, coordinate: SigilCoordinate, lines: &[Line]) -> bool {
-        for line in lines.iter() {
-            for touching_coordinate in line.coordinates().iter() {
-                if *touching_coordinate == coordinate {
-                    return true;
+        match self {
+            Self::Alpha => {
+                // true on connected to a line
+                for line in lines.iter() {
+                    for touching_coordinate in line.coordinates().iter() {
+                        if *touching_coordinate == coordinate {
+                            return true;
+                        }
+                    }
                 }
+                false
+            }
+            Self::Sigma => {
+                // true on loops
+                for line in lines.iter() {
+                    if line.start != coordinate {
+                        continue;
+                    }
+
+                    let mut frontier = vec![line.end];
+                    let mut passed = Vec::<SigilCoordinate>::new();
+                    while let Some(frontier_coordinate) = frontier.pop() {
+                        if frontier_coordinate == line.start {
+                            return true;
+                        }
+                        passed.push(frontier_coordinate);
+                        'next: for next_line in lines.iter() {
+                            if next_line.start != frontier_coordinate {
+                                continue;
+                            }
+
+                            for passed_coordinate in passed.iter() {
+                                if *passed_coordinate == next_line.end {
+                                    continue 'next;
+                                }
+                            }
+
+                            frontier.push(next_line.end);
+                        }
+                    }
+                }
+                false
             }
         }
-        false
     }
 
-    fn texture_coordinate(&self, coordinate: SigilCoordinate, lines: &[Line]) -> TextureCoordinate {
-        if self.active(coordinate, lines) {
-            return TextureCoordinate {
-                width: 0.5,
-                height: 1.0,
-                y: 0.0,
-                x: 0.5,
-            };
-        }
+    fn texture_coordinate(&self) -> TextureCoordinate {
+        let x = match self {
+            Self::Alpha => 0.0,
+            Self::Sigma => 0.5,
+        };
         TextureCoordinate {
             width: 0.5,
             height: 1.0,
             y: 0.0,
-            x: 0.0,
+            x,
         }
     }
+}
+
+struct Rune {
+    sigil: Sigil,
+    orb: Orb,
 }
 
 type CoordinateScalar = i32;
@@ -199,7 +250,7 @@ impl Line {
 }
 
 struct Puzzle {
-    sigils: HashMap<SigilCoordinate, Sigil>,
+    runes: HashMap<SigilCoordinate, Rune>,
     lines: Vec<Line>,
     cursor: SigilCoordinate,
 }
@@ -207,7 +258,7 @@ struct Puzzle {
 impl Default for Puzzle {
     fn default() -> Self {
         Self {
-            sigils: HashMap::new(),
+            runes: HashMap::new(),
             lines: Vec::new(),
             cursor: Vector2::zeros(),
         }
@@ -219,17 +270,17 @@ impl Puzzle {
         if *coordinate == self.cursor {
             return;
         }
-        if let Some(cursor_sigil) = self.sigils.get(&self.cursor) {
+        if let Some(cursor_rune) = self.runes.get(&self.cursor) {
             let line = Line {
                 start: self.cursor,
                 end: *coordinate,
             };
 
-            if !cursor_sigil.allow_intersections() && self.intersects_lines(&line) {
+            if !cursor_rune.orb.allow_intersections() && self.intersects_lines(&line) {
                 return;
             }
 
-            if let Some(_sigil) = self.sigils.get(coordinate) {
+            if let Some(_rune) = self.runes.get(coordinate) {
                 self.lines.push(line);
                 self.cursor = *coordinate;
             }
@@ -249,10 +300,30 @@ impl Puzzle {
         &'a self,
         cursor_texture: &'a wgpu::BindGroup,
         sigils_texture: &'a wgpu::BindGroup,
+        orbs_texture: &'a wgpu::BindGroup,
     ) -> Vec<SpriteBatch> {
-        let mut sprites = Vec::<Sprite>::new();
-        for (coordinate, sigil) in self.sigils.iter() {
-            sprites.push(sigil.sprite(*coordinate, &self.lines));
+        let mut orb_sprites = Vec::<Sprite>::new();
+        let mut sigil_sprites = Vec::<Sprite>::new();
+
+        for (coordinate, rune) in self.runes.iter() {
+            let transform = Transform {
+                position: coordinate.position(),
+                rotation: 0.0,
+                scale: SIGIL_SCALE,
+            };
+            let orb_coordinate = rune
+                .orb
+                .texture_coordinate(rune.sigil.active(*coordinate, &self.lines));
+
+            orb_sprites.push(Sprite {
+                transform,
+                texture_coordinate: orb_coordinate,
+            });
+
+            sigil_sprites.push(Sprite {
+                transform,
+                texture_coordinate: rune.sigil.texture_coordinate(),
+            });
         }
 
         let mut circle_sprites: Vec<Sprite> = self.lines.iter().map(|line| line.sprite()).collect();
@@ -273,7 +344,11 @@ impl Puzzle {
         vec![
             cursor,
             SpriteBatch {
-                sprites,
+                sprites: orb_sprites,
+                texture_bind_group: orbs_texture,
+            },
+            SpriteBatch {
+                sprites: sigil_sprites,
                 texture_bind_group: sigils_texture,
             },
         ]
@@ -301,17 +376,79 @@ async fn game() {
     );
     let mut puzzle = Puzzle::default();
     let mut input = Input::new(renderer.window.id());
-    puzzle.sigils.insert(Vector2::zeros(), Sigil::Alpha);
-    puzzle.sigils.insert(Vector2::new(1, 0), Sigil::Alpha);
-    puzzle.sigils.insert(Vector2::new(0, 1), Sigil::Alpha);
-    puzzle.sigils.insert(Vector2::new(1, 1), Sigil::Alpha);
-    puzzle.sigils.insert(Vector2::new(0, 2), Sigil::Alpha);
-    puzzle.sigils.insert(Vector2::new(2, 0), Sigil::Alpha);
-    puzzle.sigils.insert(Vector2::new(1, 2), Sigil::Alpha);
-    puzzle.sigils.insert(Vector2::new(2, 1), Sigil::Alpha);
-    puzzle.sigils.insert(Vector2::new(2, 2), Sigil::Alpha);
+    puzzle.runes.insert(
+        Vector2::zeros(),
+        Rune {
+            sigil: Sigil::Alpha,
+            orb: Orb::Circle,
+        },
+    );
+    puzzle.runes.insert(
+        Vector2::new(1, 0),
+        Rune {
+            sigil: Sigil::Alpha,
+            orb: Orb::Circle,
+        },
+    );
+    puzzle.runes.insert(
+        Vector2::new(0, 1),
+        Rune {
+            sigil: Sigil::Alpha,
+            orb: Orb::Circle,
+        },
+    );
+    puzzle.runes.insert(
+        Vector2::new(1, 1),
+        Rune {
+            sigil: Sigil::Alpha,
+            orb: Orb::Circle,
+        },
+    );
+    puzzle.runes.insert(
+        Vector2::new(0, 2),
+        Rune {
+            sigil: Sigil::Alpha,
+            orb: Orb::Circle,
+        },
+    );
+    puzzle.runes.insert(
+        Vector2::new(2, 0),
+        Rune {
+            sigil: Sigil::Alpha,
+            orb: Orb::Circle,
+        },
+    );
+    puzzle.runes.insert(
+        Vector2::new(1, 2),
+        Rune {
+            sigil: Sigil::Alpha,
+            orb: Orb::Circle,
+        },
+    );
+    puzzle.runes.insert(
+        Vector2::new(2, 1),
+        Rune {
+            sigil: Sigil::Alpha,
+            orb: Orb::Circle,
+        },
+    );
+    puzzle.runes.insert(
+        Vector2::new(2, 2),
+        Rune {
+            sigil: Sigil::Alpha,
+            orb: Orb::Circle,
+        },
+    );
 
     let sampler = renderer.pixel_art_sampler();
+    let orbs_texture = sprite_renderer.create_texture_bind_group(
+        &renderer.device,
+        &sampler,
+        &load_texture_from_file("assets/orbs.png", &renderer)
+            .await
+            .unwrap(),
+    );
+
     let sigils_texture = sprite_renderer.create_texture_bind_group(
         &renderer.device,
         &sampler,
@@ -340,7 +477,7 @@ async fn game() {
                 }
             }
 
-            let batches = puzzle.sprite_batches(&cursor_texture, &sigils_texture);
+            let batches = puzzle.sprite_batches(&cursor_texture, &sigils_texture, &orbs_texture);
 
             let commands = vec![
                 renderer.clear(
