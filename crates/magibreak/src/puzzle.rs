@@ -12,6 +12,20 @@ const CURSOR_SIZE: f32 = 70.0;
 
 const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
 
+pub trait FromSigilCoordinate {
+    fn from_sigil_coordinate(coordinate: SigilCoordinate) -> Self;
+}
+
+impl FromSigilCoordinate for Transform {
+    fn from_sigil_coordinate(coordinate: SigilCoordinate) -> Self {
+        Self {
+            position: coordinate.position(),
+            rotation: 0.0,
+            scale: SIGIL_SCALE,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum Orb {
     Circle,
@@ -34,7 +48,7 @@ impl Orb {
         !matches!(self, Self::Circle)
     }
 
-    fn texture_coordinate(&self, active: bool) -> TextureCoordinate {
+    pub fn texture_coordinate(&self, active: bool) -> TextureCoordinate {
         let x = if active { 0.5 } else { 0.0 };
         let y = match self {
             Self::Octogon => 2.0 / 3.0,
@@ -113,7 +127,7 @@ impl Sigil {
         }
     }
 
-    fn texture_coordinate(&self) -> TextureCoordinate {
+    pub fn texture_coordinate(&self) -> TextureCoordinate {
         let x = match self {
             Self::Alpha => 0.0,
             Self::Sigma => 0.5,
@@ -333,7 +347,6 @@ impl Puzzle {
                 transform,
                 texture_coordinate: rune.sigil.texture_coordinate(),
                 ..Default::default()
-
             });
         }
 

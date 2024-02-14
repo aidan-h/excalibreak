@@ -72,7 +72,7 @@ pub struct SpriteRenderer {
     length: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct TextureCoordinate {
     pub width: f32,
     pub height: f32,
@@ -127,6 +127,7 @@ impl Default for Transform {
 
 pub type Color = Vector4<f32>;
 
+#[derive(Clone, Copy)]
 pub struct Sprite {
     pub transform: Transform,
     pub color: Color,
@@ -184,6 +185,7 @@ impl Sprite {
     }
 }
 
+#[derive(Clone)]
 pub struct SpriteBatch<'a> {
     pub sprites: Vec<Sprite>,
     pub texture_bind_group: &'a BindGroup,

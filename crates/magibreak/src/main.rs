@@ -53,7 +53,7 @@ impl ToString for LevelEditorMode {
             Self::Clear => "Clear".to_string(),
             Self::Cursor => "Cursor".to_string(),
             Self::Place => "Place".to_string(),
-            }
+        }
     }
 }
 
@@ -102,6 +102,36 @@ impl LevelEditor {
             Sigil::Alpha => Sigil::Sigma,
             Sigil::Sigma => Sigil::Alpha,
         };
+    }
+
+    fn sprite_batches<'a>(
+        &'a self,
+        mouse_coordinate: SigilCoordinate,
+        sigils_texture: &'a wgpu::BindGroup,
+        orbs_texture: &'a wgpu::BindGroup,
+    ) -> Option<Vec<SpriteBatch>> {
+        if self.enabled && self.mode == LevelEditorMode::Place {
+            let transform = Transform::from_sigil_coordinate(mouse_coordinate);
+            return Some(vec![
+                SpriteBatch {
+                    sprites: vec![Sprite {
+                        transform,
+                        texture_coordinate: self.rune.orb.texture_coordinate(false),
+                        color: Color::new(1.0, 1.0, 1.0, 0.8),
+                    }],
+                    texture_bind_group: orbs_texture,
+                },
+                SpriteBatch {
+                    sprites: vec![Sprite {
+                        transform,
+                        texture_coordinate: self.rune.sigil.texture_coordinate(),
+                        color: Color::new(1.0, 1.0, 1.0, 0.8),
+                    }],
+                    texture_bind_group: sigils_texture,
+                },
+            ]);
+        }
+        None
     }
 }
 
@@ -153,21 +183,29 @@ async fn game() {
         ui.handle_event(&event, renderer.window.id());
 
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
+            let mouse_coordinate = if let Some(mouse_position) = input.mouse_position {
+                Some(SigilCoordinate::from_position(
+                    mouse_position.world_position(&renderer.size).into(),
+                ))
+            } else {
+                None
+            };
+
             if input.left_mouse_click == InputState::JustPressed {
-                if let Some(mouse_position) = input.mouse_position {
+                if let Some(coordinate) = mouse_coordinate {
                     if !level_editor.enabled {
-                        puzzle.input(&SigilCoordinate::from_position(
-                            mouse_position.world_position(&renderer.size).into(),
-                        ));
+                        puzzle.input(&coordinate);
                     }
                 }
             }
 
-            let batches = puzzle.sprite_batches(&cursor_texture, &sigils_texture, &orbs_texture);
             let ui_output = ui.update(
                 |ctx| {
                     egui::Window::new("level editor").show(ctx, |ui| {
-                        if ui.button(if level_editor.enabled { "Play" } else { "Edit" }).clicked() {
+                        if ui
+                            .button(if level_editor.enabled { "Play" } else { "Edit" })
+                            .clicked()
+                        {
                             level_editor.toggle();
                         }
                         if level_editor.enabled {
@@ -196,6 +234,18 @@ async fn game() {
                 &renderer.window,
                 [renderer.size.width, renderer.size.height],
             );
+
+            let mut batches =
+                puzzle.sprite_batches(&cursor_texture, &sigils_texture, &orbs_texture);
+            if let Some(coordinate) = mouse_coordinate {
+                if let Some(mut editor_batches) =
+                    level_editor.sprite_batches(coordinate, &sigils_texture, &orbs_texture)
+                {
+                    for batch in editor_batches.drain(..) {
+                        batches.push(batch);
+                    }
+                }
+            }
 
             let commands = vec![
                 renderer.clear(
