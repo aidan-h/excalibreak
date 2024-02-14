@@ -130,9 +130,14 @@ impl Renderer {
                 ref event,
                 window_id,
             } => {
-                if *window_id == self.window.id() && *event == WindowEvent::CloseRequested {
-                    *control_flow = ControlFlow::Exit;
+                if *window_id != self.window.id() {
+                    return Ok(());
                 }
+                match *event {
+                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                    WindowEvent::Resized(size) => self.resize(size),
+                    _ => {}
+                };
             }
             Event::RedrawRequested(window_id) if *window_id == self.window.id() => {
                 let time = Instant::now();
