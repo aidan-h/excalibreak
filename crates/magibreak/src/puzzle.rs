@@ -156,7 +156,7 @@ impl Sigil {
             Self::Sigma => {
                 // true on loops
                 for line in lines.iter() {
-                    if line.start != coordinate {
+                    if !line.coordinates().contains(&coordinate) {
                         continue;
                     }
 
@@ -402,11 +402,12 @@ impl Puzzle {
             if !cursor_rune.orb.allow_intersections() && self.intersects_lines(&line) {
                 return;
             }
-            cursor_rune
-                .orb
-                .effect(self.cursor, *coordinate, &mut self.lines);
 
             if let Some(_rune) = self.runes.get(coordinate) {
+                cursor_rune
+                    .orb
+                    .effect(self.cursor, *coordinate, &mut self.lines);
+
                 self.lines.push(line);
                 self.cursor = *coordinate;
             }

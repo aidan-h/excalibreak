@@ -1,7 +1,7 @@
 lines = []
 cursor = [0, 0]
 
-[runes."-1 1"]
+[runes."0 0"]
 sigil = "Alpha"
 orb = "Circle"
 
@@ -13,7 +13,7 @@ orb = "Circle"
 sigil = "Alpha"
 orb = "Circle"
 
-[runes."0 0"]
+[runes."-1 1"]
 sigil = "Alpha"
 orb = "Circle"
 
