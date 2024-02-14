@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use excali_input::*;
 use excali_render::*;
 use excali_sprite::*;
+use gcd::Gcd;
 use nalgebra::Vector2;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt};
@@ -16,13 +19,11 @@ fn main() {
     rt.block_on(game());
 }
 
-const PUZZLE_SIZE: usize = 7;
 const SIGIL_SIZE: f32 = 50.0;
 const SIGIL_SCALE: Vector2<f32> = Vector2::new(SIGIL_SIZE, SIGIL_SIZE);
 const CURSOR_SIZE: f32 = 70.0;
 
 const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
-const SIGIL_OFFSET: f32 = SIGIL_DISTANCE * PUZZLE_SIZE as f32 / 2.0 - SIGIL_DISTANCE / 2.0;
 
 #[derive(Copy, Clone)]
 enum Sigil {
@@ -43,8 +44,10 @@ impl Sigil {
 
     fn active(&self, coordinate: SigilCoordinate, lines: &[Line]) -> bool {
         for line in lines.iter() {
-            if line.start == coordinate || line.end == coordinate {
-                return true;
+            for touching_coordinate in line.coordinates().iter() {
+                if *touching_coordinate == coordinate {
+                    return true;
+                }
             }
         }
         false
@@ -68,26 +71,28 @@ impl Sigil {
     }
 }
 
-#[derive(PartialEq, Eq, Copy, Clone)]
-struct SigilCoordinate(Vector2<usize>);
+type CoordinateScalar = i32;
+type Position = Vector2<f32>;
+type SigilCoordinate = Vector2<CoordinateScalar>;
 
-impl SigilCoordinate {
-    fn valid(&self) -> bool {
-        self.0.x < PUZZLE_SIZE || self.0.y < PUZZLE_SIZE
-    }
+trait Coordinate {
+    fn position(&self) -> Position;
+    fn from_position(position: Position) -> Self;
+}
 
+impl Coordinate for SigilCoordinate {
     fn position(&self) -> Vector2<f32> {
         Vector2::new(
-            self.0.x as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
-            self.0.y as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
+            self.x as f32 * SIGIL_DISTANCE,
+            self.y as f32 * SIGIL_DISTANCE,
         )
     }
 
     fn from_position(position: Vector2<f32>) -> Self {
-        SigilCoordinate(Vector2::new(
-            ((position.x + SIGIL_OFFSET) / SIGIL_DISTANCE + 0.5).floor() as usize,
-            ((position.y + SIGIL_OFFSET) / SIGIL_DISTANCE + 0.5).floor() as usize,
-        ))
+        Vector2::new(
+            (position.x / SIGIL_DISTANCE + 0.5).floor() as CoordinateScalar,
+            (position.y / SIGIL_DISTANCE + 0.5).floor() as CoordinateScalar,
+        )
     }
 }
 
@@ -121,10 +126,34 @@ impl Line {
             texture_coordinate: Default::default(),
         }
     }
+
+    /// retrieves all touching coordinates
+    fn coordinates(&self) -> Vec<SigilCoordinate> {
+        if self.end == self.start {
+            return vec![self.start];
+        }
+        let mut slope = self.end - self.start;
+        let cardinal_direction = SigilCoordinate::new(
+            if slope.x < 0 { -1 } else { 1 },
+            if slope.y < 0 { -1 } else { 1 },
+        );
+        // for gcd
+        slope.component_mul_assign(&cardinal_direction);
+
+        // number of touching coordinates after start
+        let gcd = (slope.x as u32).gcd(slope.y as u32) as i32;
+        slope.component_mul_assign(&cardinal_direction);
+        slope /= gcd;
+        let mut coordinates = vec![self.start];
+        for i in 1..=gcd {
+            coordinates.push(slope * i + self.start);
+        }
+        coordinates
+    }
 }
 
 struct Puzzle {
-    sigils: [[Option<Sigil>; PUZZLE_SIZE]; PUZZLE_SIZE],
+    sigils: HashMap<SigilCoordinate, Sigil>,
     lines: Vec<Line>,
     cursor: SigilCoordinate,
 }
@@ -132,27 +161,19 @@ struct Puzzle {
 impl Default for Puzzle {
     fn default() -> Self {
         Self {
-            sigils: [[Some(Sigil::Alpha); PUZZLE_SIZE]; PUZZLE_SIZE],
+            sigils: HashMap::new(),
             lines: Vec::new(),
-            cursor: SigilCoordinate(Vector2::zeros()),
+            cursor: Vector2::zeros(),
         }
     }
 }
 
 impl Puzzle {
-    fn get_sigil_mut(&mut self, coordinate: &SigilCoordinate) -> Option<&mut Option<Sigil>> {
-        if !coordinate.valid() {
-            return None;
-        }
-
-        Some(&mut self.sigils[coordinate.0.y][coordinate.0.x])
-    }
-
     fn input(&mut self, coordinate: &SigilCoordinate) {
-        if *coordinate == self.cursor || !coordinate.valid() {
+        if *coordinate == self.cursor {
             return;
         }
-        if let Some(_sigil) = self.sigils[coordinate.0.y][coordinate.0.x] {
+        if let Some(_sigil) = self.sigils.get(coordinate) {
             self.lines.push(Line {
                 start: self.cursor,
                 end: *coordinate,
@@ -167,12 +188,8 @@ impl Puzzle {
         sigils_texture: &'a wgpu::BindGroup,
     ) -> Vec<SpriteBatch> {
         let mut sprites = Vec::<Sprite>::new();
-        for (y, row) in self.sigils.iter().enumerate() {
-            for (x, slot) in row.iter().enumerate() {
-                if let Some(sigil) = slot {
-                    sprites.push(sigil.sprite(SigilCoordinate(Vector2::new(x, y)), &self.lines));
-                }
-            }
+        for (coordinate, sigil) in self.sigils.iter() {
+            sprites.push(sigil.sprite(*coordinate, &self.lines));
         }
 
         let mut circle_sprites: Vec<Sprite> = self.lines.iter().map(|line| line.sprite()).collect();
@@ -221,7 +238,15 @@ async fn game() {
     );
     let mut puzzle = Puzzle::default();
     let mut input = Input::new(renderer.window.id());
-    puzzle.sigils[PUZZLE_SIZE - 1][PUZZLE_SIZE - 1] = Some(Sigil::Alpha);
+    puzzle.sigils.insert(Vector2::zeros(), Sigil::Alpha);
+    puzzle.sigils.insert(Vector2::new(1, 0), Sigil::Alpha);
+    puzzle.sigils.insert(Vector2::new(0, 1), Sigil::Alpha);
+    puzzle.sigils.insert(Vector2::new(1, 1), Sigil::Alpha);
+    puzzle.sigils.insert(Vector2::new(0, 2), Sigil::Alpha);
+    puzzle.sigils.insert(Vector2::new(2, 0), Sigil::Alpha);
+    puzzle.sigils.insert(Vector2::new(1, 2), Sigil::Alpha);
+    puzzle.sigils.insert(Vector2::new(2, 1), Sigil::Alpha);
+    puzzle.sigils.insert(Vector2::new(2, 2), Sigil::Alpha);
 
     let sampler = renderer.pixel_art_sampler();
     let sigils_texture = sprite_renderer.create_texture_bind_group(
