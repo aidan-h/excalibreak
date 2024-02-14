@@ -1,5 +1,3 @@
-use std::f32::consts::PI;
-
 use nalgebra::Vector2;
 use wgpu::util::DeviceExt;
 use wgpu::*;

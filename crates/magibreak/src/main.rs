@@ -1,5 +1,3 @@
-use std::f32::consts::PI;
-
 use excali_input::*;
 use excali_render::*;
 use excali_sprite::*;
@@ -61,9 +59,14 @@ impl Sigil {
     }
 }
 
+#[derive(PartialEq, Eq, Copy, Clone)]
 struct SigilCoordinate(Vector2<usize>);
 
 impl SigilCoordinate {
+    fn valid(&self) -> bool {
+        self.0.x < PUZZLE_SIZE || self.0.y < PUZZLE_SIZE
+    }
+
     fn position(&self) -> Vector2<f32> {
         Vector2::new(
             self.0.x as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
@@ -83,17 +86,37 @@ fn line_between(start: Vector2<f32>, end: Vector2<f32>, thickness: f32) -> Trans
     let position = (start + end) / 2.0;
     let direction = end - start;
     let magnitude = direction.magnitude();
-   let rotation = (direction.y / magnitude).asin();
+
+    let rotation = if direction.x < 0.0 {
+        (direction.y / magnitude).asin()
+    } else {
+        (-direction.y / magnitude).asin()
+    };
 
     Transform {
         position,
         rotation,
-        scale: Vector2::new(magnitude, thickness)
+        scale: Vector2::new(magnitude, thickness),
+    }
+}
+
+struct Line {
+    start: SigilCoordinate,
+    end: SigilCoordinate,
+}
+
+impl Line {
+    fn sprite(&self) -> Sprite {
+        Sprite {
+            transform: line_between(self.start.position(), self.end.position(), 40.0),
+            texture_coordinate: Default::default(),
+        }
     }
 }
 
 struct Puzzle {
     sigils: [[Option<Sigil>; PUZZLE_SIZE]; PUZZLE_SIZE],
+    lines: Vec<Line>,
     cursor: SigilCoordinate,
 }
 
@@ -101,6 +124,7 @@ impl Default for Puzzle {
     fn default() -> Self {
         Self {
             sigils: [[Some(Sigil { active: false }); PUZZLE_SIZE]; PUZZLE_SIZE],
+            lines: Vec::new(),
             cursor: SigilCoordinate(Vector2::zeros()),
         }
     }
@@ -108,11 +132,24 @@ impl Default for Puzzle {
 
 impl Puzzle {
     fn get_sigil_mut(&mut self, coordinate: &SigilCoordinate) -> Option<&mut Option<Sigil>> {
-        if coordinate.0.x >= PUZZLE_SIZE || coordinate.0.y >= PUZZLE_SIZE {
+        if !coordinate.valid() {
             return None;
         }
 
         Some(&mut self.sigils[coordinate.0.y][coordinate.0.x])
+    }
+
+    fn input(&mut self, coordinate: &SigilCoordinate) {
+        if *coordinate == self.cursor || !coordinate.valid() {
+            return;
+        }
+        if let Some(_sigil) = self.sigils[coordinate.0.y][coordinate.0.x] {
+            self.lines.push(Line {
+                start: self.cursor,
+                end: *coordinate,
+            });
+            self.cursor = *coordinate;
+        }
     }
 
     fn sprite_batches<'a>(
@@ -128,21 +165,19 @@ impl Puzzle {
                 }
             }
         }
+
+        let mut circle_sprites: Vec<Sprite> = self.lines.iter().map(|line| line.sprite()).collect();
+        circle_sprites.push(Sprite {
+            transform: Transform {
+                scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
+                position: self.cursor.position(),
+                rotation: 0.0,
+            },
+            texture_coordinate: Default::default(),
+        });
+
         let cursor = SpriteBatch {
-            sprites: vec![Sprite {
-                transform: Transform {
-                    scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
-                    position: self.cursor.position(),
-                    rotation: 0.0,
-                },
-                texture_coordinate: Default::default(),
-            }, Sprite {
-                transform: line_between(SigilCoordinate(Vector2::zeros()).position(), SigilCoordinate(Vector2::new(0, 3)).position(), 40.0),
-                texture_coordinate: Default::default(),
-            }, Sprite {
-                transform: line_between(SigilCoordinate(Vector2::zeros()).position(), SigilCoordinate(Vector2::new(3, 0)).position(), 40.0),
-                texture_coordinate: Default::default(),
-            }],
+            sprites: circle_sprites,
             texture_bind_group: cursor_texture,
         };
 
@@ -202,11 +237,9 @@ async fn game() {
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
             if input.left_mouse_click == InputState::JustPressed {
                 if let Some(mouse_position) = input.mouse_position {
-                    if let Some(sigil) = puzzle.get_sigil_mut(&SigilCoordinate::from_position(
+                    puzzle.input(&SigilCoordinate::from_position(
                         mouse_position.world_position(&renderer.size).into(),
-                    )) {
-                        *sigil = Some(Sigil { active: true });
-                    }
+                    ));
                 }
             }
 
