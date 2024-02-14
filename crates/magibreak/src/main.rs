@@ -1,5 +1,8 @@
 use excali_render::*;
 use excali_sprite::*;
+use nalgebra::Vector2;
+use tokio::fs::File;
+use tokio::io::{self, AsyncReadExt};
 use winit::event_loop::EventLoop;
 
 const STACK_SIZE: usize = 10_000_000;
@@ -14,6 +17,8 @@ fn main() {
 
 const PUZZLE_SIZE: usize = 10;
 const SIGIL_SIZE: f32 = 50.0;
+const CURSOR_SIZE: f32 = 70.0;
+
 const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
 const SIGIL_OFFSET: f32 = SIGIL_DISTANCE * PUZZLE_SIZE as f32 / 2.0 - SIGIL_DISTANCE / 2.0;
 
@@ -23,12 +28,9 @@ struct Sigil {
 }
 
 impl Sigil {
-    fn sprite(&self, x: usize, y: usize) -> Sprite {
+    fn sprite(&self, coordinate: SigilCoordinate) -> Sprite {
         Sprite {
-            position: [
-                x as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
-                y as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
-            ],
+            position: coordinate.position().data.0[0],
             size: [SIGIL_SIZE, SIGIL_SIZE],
             texture_coordinate: self.texture_coordinate(),
         }
@@ -52,30 +54,72 @@ impl Sigil {
     }
 }
 
+struct SigilCoordinate(Vector2<usize>);
+
+impl SigilCoordinate {
+    fn position(&self) -> Vector2<f32> {
+        Vector2::new(
+            self.0.x as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
+            self.0.y as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
+        )
+    }
+}
+
 struct Puzzle {
     sigils: [[Option<Sigil>; PUZZLE_SIZE]; PUZZLE_SIZE],
+    cursor: SigilCoordinate,
 }
 
 impl Default for Puzzle {
     fn default() -> Self {
         Self {
             sigils: [[Some(Sigil { active: false }); PUZZLE_SIZE]; PUZZLE_SIZE],
+            cursor: SigilCoordinate(Vector2::zeros()),
         }
     }
 }
 
 impl Puzzle {
-    fn sprites(&self) -> Vec<Sprite> {
+    fn sprite_batches<'a>(
+        &'a self,
+        cursor_texture: &'a wgpu::BindGroup,
+        sigils_texture: &'a wgpu::BindGroup,
+    ) -> [SpriteBatch; 2] {
         let mut sprites = Vec::<Sprite>::new();
         for (y, row) in self.sigils.iter().enumerate() {
             for (x, slot) in row.iter().enumerate() {
                 if let Some(sigil) = slot {
-                    sprites.push(sigil.sprite(x, y));
+                    sprites.push(sigil.sprite(SigilCoordinate(Vector2::new(x, y))));
                 }
             }
         }
-        sprites
+        let cursor = SpriteBatch {
+            sprites: vec![Sprite {
+                position: self.cursor.position().data.0[0],
+                size: [CURSOR_SIZE, CURSOR_SIZE],
+                texture_coordinate: Default::default(),
+            }],
+            texture_bind_group: cursor_texture,
+        };
+
+        [
+            cursor,
+            SpriteBatch {
+                sprites,
+                texture_bind_group: sigils_texture,
+            },
+        ]
     }
+}
+
+// TODO move to excali_renderer under feature
+async fn load_texture_from_file(path: &str, renderer: &Renderer) -> io::Result<wgpu::TextureView> {
+    let mut file = File::open(path).await?;
+
+    let mut bytes = vec![];
+    file.read_to_end(&mut bytes).await?;
+
+    Ok(renderer.load_texture(&bytes, Some(path)))
 }
 
 async fn game() {
@@ -94,19 +138,21 @@ async fn game() {
     let sigils_texture = sprite_renderer.create_texture_bind_group(
         &renderer.device,
         &sampler,
-        &renderer.load_texture(
-            include_bytes!("../assets/sigils.png"),
-            Some("Sigils Texture"),
-        ),
+        &load_texture_from_file("assets/sigils.png", &renderer)
+            .await
+            .unwrap(),
+    );
+
+    let cursor_texture = sprite_renderer.create_texture_bind_group(
+        &renderer.device,
+        &sampler,
+        &load_texture_from_file("assets/cursor.png", &renderer)
+            .await
+            .unwrap(),
     );
 
     event_loop.run(move |event, _, control_flow| {
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
-            let sprite_batch = SpriteBatch {
-                sprites: puzzle.sprites(),
-                texture_bind_group: &sigils_texture,
-            };
-
             let commands = vec![
                 renderer.clear(
                     view,
@@ -118,7 +164,7 @@ async fn game() {
                     },
                 ),
                 sprite_renderer.draw(
-                    &[sprite_batch],
+                    &puzzle.sprite_batches(&cursor_texture, &sigils_texture),
                     &renderer.device,
                     &renderer.queue,
                     view,
