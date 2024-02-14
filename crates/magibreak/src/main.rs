@@ -200,7 +200,7 @@ async fn game() {
             let commands = vec![
                 renderer.clear(
                     view,
-                    Color {
+                    wgpu::Color {
                         r: 0.4,
                         g: 0.4,
                         b: 0.4,

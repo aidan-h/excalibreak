@@ -1,4 +1,4 @@
-use nalgebra::Vector2;
+use nalgebra::{Vector2, Vector4};
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
@@ -17,6 +17,7 @@ type VertexTextureCoordinate = [f32; 2];
 struct Vertex {
     position: [f32; 2],
     tex_coords: VertexTextureCoordinate,
+    color: [f32; 4],
 }
 
 impl Vertex {
@@ -34,6 +35,11 @@ impl Vertex {
                     offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x4,
                 },
             ],
         }
@@ -119,9 +125,22 @@ impl Default for Transform {
     }
 }
 
+pub type Color = Vector4<f32>;
+
 pub struct Sprite {
     pub transform: Transform,
+    pub color: Color,
     pub texture_coordinate: TextureCoordinate,
+}
+
+impl Default for Sprite {
+    fn default() -> Self {
+        Self {
+            transform: Transform::default(),
+            texture_coordinate: TextureCoordinate::default(),
+            color: Color::new(1.0, 1.0, 1.0, 1.0),
+        }
+    }
 }
 
 impl Sprite {
@@ -143,18 +162,22 @@ impl Sprite {
         [
             Vertex {
                 position: [bottom_left.x, bottom_left.y],
+                color: [self.color.x, self.color.y, self.color.z, self.color.w],
                 tex_coords: self.texture_coordinate.bottom_left(),
             },
             Vertex {
                 position: [bottom_right.x, bottom_right.y],
+                color: [self.color.x, self.color.y, self.color.z, self.color.w],
                 tex_coords: self.texture_coordinate.bottom_right(),
             },
             Vertex {
                 position: [top_right.x, top_right.y],
+                color: [self.color.x, self.color.y, self.color.z, self.color.w],
                 tex_coords: self.texture_coordinate.top_right(),
             },
             Vertex {
                 position: [top_left.x, top_left.y],
+                color: [self.color.x, self.color.y, self.color.z, self.color.w],
                 tex_coords: self.texture_coordinate.top_left(),
             },
         ]

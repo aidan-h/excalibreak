@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-pub use wgpu::{Color, SurfaceError};
+pub use wgpu::SurfaceError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};

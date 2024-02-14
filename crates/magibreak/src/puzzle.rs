@@ -186,7 +186,7 @@ impl Line {
     fn sprite(&self) -> Sprite {
         Sprite {
             transform: line_between(self.start.position(), self.end.position(), 10.0),
-            texture_coordinate: Default::default(),
+            ..Default::default()
         }
     }
 
@@ -326,11 +326,14 @@ impl Puzzle {
             orb_sprites.push(Sprite {
                 transform,
                 texture_coordinate: orb_coordinate,
+                ..Default::default()
             });
 
             sigil_sprites.push(Sprite {
                 transform,
                 texture_coordinate: rune.sigil.texture_coordinate(),
+                ..Default::default()
+
             });
         }
 
@@ -341,7 +344,7 @@ impl Puzzle {
                 position: self.cursor.position(),
                 rotation: 0.0,
             },
-            texture_coordinate: Default::default(),
+            ..Default::default()
         });
 
         let cursor = SpriteBatch {
