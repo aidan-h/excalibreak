@@ -4,7 +4,6 @@ use excali_render::*;
 use excali_sprite::*;
 use excali_ui::egui_winit::egui;
 use excali_ui::*;
-use nalgebra::Vector2;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt};
 use winit::event_loop::EventLoop;
@@ -31,7 +30,7 @@ async fn load_texture_from_file(path: &str, renderer: &Renderer) -> io::Result<w
     Ok(renderer.load_texture(&bytes, Some(path)))
 }
 
-async fn load_level_file(name: &str) ->io::Result<String> {
+async fn load_level_file(name: &str) -> io::Result<String> {
     const LEVELS_PATH: &str = "./assets/levels/";
     let mut file = File::open(format!("{}{}.toml", LEVELS_PATH, name)).await?;
 
@@ -39,6 +38,71 @@ async fn load_level_file(name: &str) ->io::Result<String> {
     file.read_to_string(&mut contents).await?;
 
     Ok(contents)
+}
+
+#[derive(Eq, PartialEq)]
+enum LevelEditorMode {
+    Clear,
+    Cursor,
+    Place,
+}
+
+impl ToString for LevelEditorMode {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Clear => "Clear".to_string(),
+            Self::Cursor => "Cursor".to_string(),
+            Self::Place => "Place".to_string(),
+            }
+    }
+}
+
+struct LevelEditor {
+    enabled: bool,
+    mode: LevelEditorMode,
+    rune: Rune,
+}
+
+impl Default for LevelEditor {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: LevelEditorMode::Place,
+            rune: Rune {
+                sigil: Sigil::Alpha,
+                orb: Orb::Circle,
+            },
+        }
+    }
+}
+
+impl LevelEditor {
+    fn toggle(&mut self) {
+        self.enabled = !self.enabled;
+    }
+
+    fn change_mode(&mut self) {
+        self.mode = match self.mode {
+            LevelEditorMode::Clear => LevelEditorMode::Cursor,
+            LevelEditorMode::Cursor => LevelEditorMode::Place,
+            LevelEditorMode::Place => LevelEditorMode::Clear,
+        };
+    }
+
+    fn change_orb(&mut self) {
+        self.rune.orb = match self.rune.orb {
+            Orb::Circle => Orb::Diamond,
+            Orb::Diamond => Orb::Octogon,
+            Orb::Octogon => Orb::Circle,
+        };
+    }
+
+    fn change_sigil(&mut self) {
+        self.rune.sigil = match self.rune.sigil {
+            Sigil::Alpha => Sigil::Sigma,
+            Sigil::Sigma => Sigil::Alpha,
+        };
+    }
 }
 
 async fn game() {
@@ -51,8 +115,10 @@ async fn game() {
         renderer.size.height as f32,
     );
 
-    let seriable_puzzle: SerialablePuzzle = toml::from_str(load_level_file("draft").await.unwrap().as_str()).unwrap();
+    let seriable_puzzle: SerialablePuzzle =
+        toml::from_str(load_level_file("draft").await.unwrap().as_str()).unwrap();
     let mut puzzle = Puzzle::try_from(seriable_puzzle).unwrap();
+    let mut level_editor = LevelEditor::default();
 
     let mut input = Input::new(renderer.window.id());
     let mut ui = UI::new(&renderer.device, &event_loop);
@@ -89,9 +155,11 @@ async fn game() {
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
             if input.left_mouse_click == InputState::JustPressed {
                 if let Some(mouse_position) = input.mouse_position {
-                    puzzle.input(&SigilCoordinate::from_position(
-                        mouse_position.world_position(&renderer.size).into(),
-                    ));
+                    if !level_editor.enabled {
+                        puzzle.input(&SigilCoordinate::from_position(
+                            mouse_position.world_position(&renderer.size).into(),
+                        ));
+                    }
                 }
             }
 
@@ -99,7 +167,27 @@ async fn game() {
             let ui_output = ui.update(
                 |ctx| {
                     egui::Window::new("level editor").show(ctx, |ui| {
-                        ui.heading("My egui Application");
+                        if ui.button(if level_editor.enabled { "Play" } else { "Edit" }).clicked() {
+                            level_editor.toggle();
+                        }
+                        if level_editor.enabled {
+                            ui.label("Mode");
+                            if ui.button(level_editor.mode.to_string()).clicked() {
+                                level_editor.change_mode();
+                            }
+
+                            if level_editor.mode == LevelEditorMode::Place {
+                                ui.label("Sigil");
+                                if ui.button(level_editor.rune.sigil.to_string()).clicked() {
+                                    level_editor.change_sigil();
+                                }
+
+                                ui.label("Orb");
+                                if ui.button(level_editor.rune.orb.to_string()).clicked() {
+                                    level_editor.change_orb();
+                                }
+                            }
+                        }
                     });
                 },
                 &renderer.device,

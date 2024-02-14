@@ -19,6 +19,16 @@ pub enum Orb {
     Octogon,
 }
 
+impl ToString for Orb {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Circle => "Circle".to_string(),
+            Self::Diamond => "Diamond".to_string(),
+            Self::Octogon => "Octogon".to_string(),
+        }
+    }
+}
+
 impl Orb {
     fn allow_intersections(&self) -> bool {
         !matches!(self, Self::Circle)
@@ -44,6 +54,15 @@ impl Orb {
 pub enum Sigil {
     Alpha,
     Sigma,
+}
+
+impl ToString for Sigil {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Alpha => "Alpha".to_string(),
+            Self::Sigma => "Sigma".to_string(),
+        }
+    }
 }
 
 impl Sigil {
