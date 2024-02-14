@@ -31,23 +31,16 @@ async fn load_texture_from_file(path: &str, renderer: &Renderer) -> io::Result<w
     Ok(renderer.load_texture(&bytes, Some(path)))
 }
 
-async fn load_level_file(name: &str) -> io::Result<String> {
-    const LEVELS_PATH: &str = "./assets/levels/";
-    let mut file = File::open(format!("{}{}.toml", LEVELS_PATH, name)).await?;
-
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).await?;
-
-    Ok(contents)
-}
-
-async fn load_texture(path: &str, sprite_renderer: &SpriteRenderer, renderer: &Renderer, sampler: &wgpu::Sampler) -> wgpu::BindGroup {
+async fn load_texture(
+    path: &str,
+    sprite_renderer: &SpriteRenderer,
+    renderer: &Renderer,
+    sampler: &wgpu::Sampler,
+) -> wgpu::BindGroup {
     sprite_renderer.create_texture_bind_group(
         &renderer.device,
         sampler,
-        &load_texture_from_file(path, renderer)
-            .await
-            .unwrap(),
+        &load_texture_from_file(path, renderer).await.unwrap(),
     )
 }
 async fn game() {
@@ -60,14 +53,8 @@ async fn game() {
         renderer.size.height as f32,
     );
 
-    let seriable_puzzle: SerialablePuzzle =
-        toml::from_str(load_level_file("draft").await.unwrap().as_str()).unwrap();
-    let mut puzzle = Puzzle::try_from(seriable_puzzle).unwrap();
-
-    // puzzle's original state
-    let mut loaded_puzzle = puzzle.clone();
-
-    let mut level_editor = LevelEditor::default();
+    let mut level_editor = LevelEditor::new("draft".to_string()).await;
+    let mut puzzle = level_editor.loaded_puzzle.clone();
 
     let mut input = Input::new(renderer.window.id());
     let mut ui = UI::new(&renderer.device, &event_loop);
@@ -75,9 +62,12 @@ async fn game() {
     let sampler = renderer.pixel_art_sampler();
 
     let orbs_texture = load_texture("assets/orbs.png", &sprite_renderer, &renderer, &sampler).await;
-    let border_texture = load_texture("assets/border.png", &sprite_renderer, &renderer, &sampler).await;
-    let sigils_texture = load_texture("assets/sigils.png", &sprite_renderer, &renderer, &sampler).await;
-    let cursor_texture = load_texture("assets/cursor.png", &sprite_renderer, &renderer, &sampler).await;
+    let border_texture =
+        load_texture("assets/border.png", &sprite_renderer, &renderer, &sampler).await;
+    let sigils_texture =
+        load_texture("assets/sigils.png", &sprite_renderer, &renderer, &sampler).await;
+    let cursor_texture =
+        load_texture("assets/cursor.png", &sprite_renderer, &renderer, &sampler).await;
 
     event_loop.run(move |event, _, control_flow| {
         input.handle_event(&event, ui.handle_event(&event, renderer.window.id()));
@@ -91,18 +81,20 @@ async fn game() {
                 None
             };
 
-            if !input.left_mouse_click.consumed && input.left_mouse_click.state == InputState::JustPressed {
+            if !input.left_mouse_click.consumed
+                && input.left_mouse_click.state == InputState::JustPressed
+            {
                 if let Some(coordinate) = mouse_coordinate {
                     if !level_editor.enabled {
                         puzzle.input(&coordinate);
                     }
-                    level_editor.input(coordinate, &mut puzzle, &mut loaded_puzzle);
+                    level_editor.input(coordinate, &mut puzzle);
                 }
             }
 
             let ui_output = ui.update(
                 |ctx| {
-                    level_editor.ui(ctx, &mut puzzle, &mut loaded_puzzle);
+                    level_editor.ui(ctx, &mut puzzle);
                 },
                 &renderer.device,
                 &renderer.queue,

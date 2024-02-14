@@ -2,6 +2,9 @@ use crate::puzzle::*;
 use excali_sprite::{Color, Sprite, SpriteBatch, Transform};
 use excali_ui::egui_winit::egui::{self, Context};
 use nalgebra::Vector2;
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::task::JoinHandle;
 
 #[derive(Eq, PartialEq)]
 enum LevelEditorMode {
@@ -20,17 +23,36 @@ impl ToString for LevelEditorMode {
     }
 }
 
+//TODO remove unwraps
+async fn load_puzzle(name: String) -> Puzzle {
+    let mut file = File::open(format!("{}{}.toml", LEVELS_PATH, name))
+        .await
+        .unwrap();
+
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).await.unwrap();
+    let serialable_puzzle: SerialablePuzzle = toml::from_str(contents.as_str()).unwrap();
+    Puzzle::try_from(serialable_puzzle).unwrap()
+}
+
 pub struct LevelEditor {
     pub enabled: bool,
+    // puzzle's original state
+    pub loaded_puzzle: Puzzle,
+    file_name: String,
     mode: LevelEditorMode,
+    save_future: Option<JoinHandle<()>>,
     rune: Rune,
 }
 
-impl Default for LevelEditor {
-    fn default() -> Self {
+impl LevelEditor {
+    pub async fn new(file_name: String) -> Self {
         Self {
             enabled: false,
+            loaded_puzzle: load_puzzle(file_name.clone()).await,
+            file_name,
             mode: LevelEditorMode::Place,
+            save_future: None,
             rune: Rune {
                 sigil: Sigil::Alpha,
                 orb: Orb::Circle,
@@ -39,51 +61,79 @@ impl Default for LevelEditor {
     }
 }
 
+const LEVELS_PATH: &str = "./assets/levels/";
 impl LevelEditor {
-    pub fn ui(&mut self, ctx: &Context, puzzle: &mut Puzzle, loaded_puzzle: &mut Puzzle) {
-        egui::Window::new("level editor").show(ctx, |ui| {
+    pub fn ui(&mut self, ctx: &Context, puzzle: &mut Puzzle) {
+        egui::Window::new(format!("level editor - {}.toml", self.file_name)).show(ctx, |ui| {
             if ui
                 .button(if self.enabled { "Play" } else { "Edit" })
                 .clicked()
             {
-                self.toggle(puzzle, loaded_puzzle);
+                self.toggle(puzzle);
             }
-            if self.enabled {
-                ui.label("Mode");
-                if ui.button(self.mode.to_string()).clicked() {
-                    self.change_mode();
+            if !self.enabled {
+                return;
+            }
+
+            ui.label("Mode");
+            if ui.button(self.mode.to_string()).clicked() {
+                self.change_mode();
+            }
+
+            if self.mode == LevelEditorMode::Place {
+                ui.label("Sigil");
+                if ui.button(self.rune.sigil.to_string()).clicked() {
+                    self.change_sigil();
                 }
 
-                if self.mode == LevelEditorMode::Place {
-                    ui.label("Sigil");
-                    if ui.button(self.rune.sigil.to_string()).clicked() {
-                        self.change_sigil();
-                    }
-
-                    ui.label("Orb");
-                    if ui.button(self.rune.orb.to_string()).clicked() {
-                        self.change_orb();
-                    }
+                ui.label("Orb");
+                if ui.button(self.rune.orb.to_string()).clicked() {
+                    self.change_orb();
                 }
+            }
+
+            if let Some(save_future) = &self.save_future {
+                if save_future.is_finished() {
+                    self.save_future = None;
+                } else {
+                    ui.label("Saving");
+                }
+            } else if ui.button("Save").clicked() {
+                let string: String =
+                    toml::to_string(&SerialablePuzzle::from(self.loaded_puzzle.clone())).unwrap();
+                let file_name = self.file_name.clone();
+
+                self.save_future = Some(tokio::spawn(async move {
+                    let mut file = File::create(format!("{}{}.toml", LEVELS_PATH, file_name))
+                        .await
+                        .unwrap();
+                    file.write_all(string.as_bytes()).await.unwrap();
+                }));
             }
         });
     }
 
-    pub fn input(&self, coordinate: SigilCoordinate, puzzle: &mut Puzzle, loaded_puzzle: &mut Puzzle ) {
+    pub fn input(&mut self, coordinate: SigilCoordinate, puzzle: &mut Puzzle) {
         if !self.enabled {
             return;
         }
         match self.mode {
-            LevelEditorMode::Cursor => {loaded_puzzle.cursor = coordinate;},
-            LevelEditorMode::Clear => {loaded_puzzle.runes.remove(&coordinate);},
-            LevelEditorMode::Place => {loaded_puzzle.runes.insert(coordinate, self.rune);},
+            LevelEditorMode::Cursor => {
+                self.loaded_puzzle.cursor = coordinate;
+            }
+            LevelEditorMode::Clear => {
+                self.loaded_puzzle.runes.remove(&coordinate);
+            }
+            LevelEditorMode::Place => {
+                self.loaded_puzzle.runes.insert(coordinate, self.rune);
+            }
         };
-        *puzzle = loaded_puzzle.clone();
+        *puzzle = self.loaded_puzzle.clone();
     }
 
-    fn toggle(&mut self, puzzle: &mut Puzzle, loaded_puzzle: &mut Puzzle) {
+    fn toggle(&mut self, puzzle: &mut Puzzle) {
         self.enabled = !self.enabled;
-        *puzzle = loaded_puzzle.clone();
+        *puzzle = self.loaded_puzzle.clone();
     }
 
     fn change_mode(&mut self) {

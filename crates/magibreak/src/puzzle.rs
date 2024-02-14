@@ -222,7 +222,6 @@ impl Line {
     }
 
     fn intersects(&self, other: &Self) -> bool {
-
         // see https://stackoverflow.com/a/565282 & ucarion/line_intersection
         let p = Position::new(self.start.x as f32, self.start.y as f32);
         let q = Position::new(other.start.x as f32, other.start.y as f32);
@@ -239,10 +238,11 @@ impl Line {
         }
 
         // endpoints are not considered except in parallel scenario
-        if r_cross_s != 0.0 && ((self.start == other.start && self.end != other.end)
-            || (self.start == other.end && self.end != other.start)
-            || (self.end == other.start && self.start != other.end)
-            || (self.end == other.end && self.start != other.start))
+        if r_cross_s != 0.0
+            && ((self.start == other.start && self.end != other.end)
+                || (self.start == other.end && self.end != other.start)
+                || (self.end == other.start && self.start != other.end)
+                || (self.end == other.end && self.start != other.start))
         {
             return false;
         }
@@ -320,7 +320,9 @@ impl Puzzle {
             if !cursor_rune.orb.allow_intersections() && self.intersects_lines(&line) {
                 return;
             }
-            cursor_rune.orb.effect(self.cursor, *coordinate, &mut self.lines);
+            cursor_rune
+                .orb
+                .effect(self.cursor, *coordinate, &mut self.lines);
 
             if let Some(_rune) = self.runes.get(coordinate) {
                 self.lines.push(line);
