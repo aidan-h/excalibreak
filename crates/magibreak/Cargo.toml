@@ -11,6 +11,9 @@ toml = "0.7.2"
 wgpu = "0.15.1"
 winit = "0.28.1"
 excali_io = { version = "0.1.0", path = "../excali_io" }
+bytemuck = { verstion = "1.13.0", features = ["derive"] }
+excali_3d = { version = "0.1.0", path = "../excali_3d" }
+perlin_noise = "1.0.1"
 
 [dependencies.excali_input]
 version = "0.1.0"

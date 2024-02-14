@@ -1,9 +1,10 @@
 # TODO
-## Mechanics
-- Make lines points define at sigils instead of coordinates
 
-## Polish
-- Line draw animation
-
-## Art
-- Prototype art
+Exploration:
+- Platforming (Solution affects world)
+- Graph (Basic)
+- Meta (Baba is You)
+- Cartography?
+Shackled to a cartographer's table
+Historian
+Archaeology

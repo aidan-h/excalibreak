@@ -148,7 +148,7 @@ impl Renderer {
         mut update: F,
     ) -> Result<(), wgpu::SurfaceError>
     where
-        F: FnMut(&mut Self, &wgpu::TextureView) -> Vec<wgpu::CommandBuffer>,
+        F: FnMut(&mut Self, &wgpu::TextureView, f64) -> Vec<wgpu::CommandBuffer>,
     {
         match event {
             Event::WindowEvent {
@@ -167,7 +167,8 @@ impl Renderer {
             Event::RedrawRequested(window_id) if *window_id == self.window.id() => {
                 let time = Instant::now();
 
-                if time.duration_since(self.last_frame).as_secs_f64() < 1.0 / self.fps_target {
+                let delta = time.duration_since(self.last_frame).as_secs_f64();
+                if delta < 1.0 / self.fps_target {
                     return Ok(());
                 }
 
@@ -176,7 +177,7 @@ impl Renderer {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
-                let buffers = update(self, &view);
+                let buffers = update(self, &view, delta);
                 self.queue.submit(buffers);
                 output.present();
 
@@ -190,7 +191,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub async fn new(event_loop: &mut EventLoop<()>) -> Self {
+    pub async fn new(event_loop: &mut EventLoop<()>, features: wgpu::Features) -> Self {
         let window = WindowBuilder::new().build(event_loop).unwrap();
         let size = window.inner_size();
 
@@ -219,7 +220,7 @@ impl Renderer {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
+                    features,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     limits: if cfg!(target_arch = "wasm32") {
