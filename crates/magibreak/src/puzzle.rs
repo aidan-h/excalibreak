@@ -26,7 +26,7 @@ impl FromSigilCoordinate for Transform {
     }
 }
 
-#[derive(Serialize, PartialEq, Eq, Deserialize, Copy, Clone)]
+#[derive(Serialize, Debug, PartialEq, Eq, Deserialize, Copy, Clone)]
 pub enum Orb {
     Circle,
     Diamond,
@@ -77,7 +77,7 @@ impl Orb {
     }
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
+#[derive(Serialize, Debug, Deserialize, Copy, Clone)]
 pub enum Sigil {
     Alpha,
     Sigma,
@@ -154,7 +154,7 @@ impl Sigil {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Debug, Clone, Serialize, Deserialize)]
 pub struct Rune {
     pub sigil: Sigil,
     pub orb: Orb,
@@ -289,7 +289,7 @@ impl Line {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Puzzle {
     pub runes: HashMap<SigilCoordinate, Rune>,
     pub lines: Vec<Line>,

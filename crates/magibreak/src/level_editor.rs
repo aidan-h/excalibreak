@@ -4,6 +4,8 @@ use excali_ui::egui_winit::egui::{self, Context};
 use nalgebra::Vector2;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::oneshot::Receiver;
+use tokio::sync::oneshot::error::TryRecvError;
 use tokio::task::JoinHandle;
 
 #[derive(Eq, PartialEq)]
@@ -42,6 +44,7 @@ pub struct LevelEditor {
     file_name: String,
     mode: LevelEditorMode,
     save_future: Option<JoinHandle<()>>,
+    load_future: Option<Receiver<Puzzle>>,
     rune: Rune,
 }
 
@@ -53,6 +56,7 @@ impl LevelEditor {
             file_name,
             mode: LevelEditorMode::Place,
             save_future: None,
+            load_future: None,
             rune: Rune {
                 sigil: Sigil::Alpha,
                 orb: Orb::Circle,
@@ -64,7 +68,7 @@ impl LevelEditor {
 const LEVELS_PATH: &str = "./assets/levels/";
 impl LevelEditor {
     pub fn ui(&mut self, ctx: &Context, puzzle: &mut Puzzle) {
-        egui::Window::new(format!("level editor - {}.toml", self.file_name)).show(ctx, |ui| {
+        egui::Window::new("level editor").show(ctx, |ui| {
             if ui
                 .button(if self.enabled { "Play" } else { "Edit" })
                 .clicked()
@@ -92,6 +96,7 @@ impl LevelEditor {
                 }
             }
 
+            ui.add(egui::TextEdit::singleline(&mut self.file_name));
             if let Some(save_future) = &self.save_future {
                 if save_future.is_finished() {
                     self.save_future = None;
@@ -109,6 +114,29 @@ impl LevelEditor {
                         .unwrap();
                     file.write_all(string.as_bytes()).await.unwrap();
                 }));
+            }
+            if let Some(load_future) = self.load_future.as_mut() {
+                match load_future.try_recv() {
+                    Ok(new_puzzle) => {
+                        self.loaded_puzzle = new_puzzle.clone();
+                        *puzzle = new_puzzle;
+                        self.load_future = None;
+                    },
+                    Err(err) => {
+                        match err {
+                            TryRecvError::Closed => self.load_future = None,
+                            TryRecvError::Empty => {},
+                        }
+                    }
+                }
+            } else if ui.button("Load").clicked() {
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                self.load_future = Some(rx);
+
+                let file_name = self.file_name.clone();
+                tokio::spawn(async move {
+                    tx.send(load_puzzle(file_name).await).unwrap();
+                });
             }
         });
     }
