@@ -9,6 +9,7 @@ edition = "2021"
 excali_input = { version = "0.1.0", path = "../excali_input" }
 excali_render = { version = "0.1.0", path = "../excali_render" }
 excali_sprite = { version = "0.1.0", path = "../excali_sprite" }
+excali_ui = { version = "0.1.0", path = "../excali_ui" }
 gcd = "2.3.0"
 nalgebra = { version = "0.32.1", default-features = false }
 tokio = { version = "1", features = ["full"] }

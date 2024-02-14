@@ -2,6 +2,8 @@ use crate::puzzle::*;
 use excali_input::*;
 use excali_render::*;
 use excali_sprite::*;
+use excali_ui::egui_winit::egui;
+use excali_ui::*;
 use nalgebra::Vector2;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt};
@@ -40,69 +42,19 @@ async fn game() {
     );
     let mut puzzle = Puzzle::default();
     let mut input = Input::new(renderer.window.id());
-    puzzle.runes.insert(
-        Vector2::zeros(),
-        Rune {
-            sigil: Sigil::Alpha,
-            orb: Orb::Circle,
-        },
-    );
-    puzzle.runes.insert(
-        Vector2::new(1, 0),
-        Rune {
-            sigil: Sigil::Alpha,
-            orb: Orb::Circle,
-        },
-    );
-    puzzle.runes.insert(
-        Vector2::new(0, 1),
-        Rune {
-            sigil: Sigil::Alpha,
-            orb: Orb::Circle,
-        },
-    );
-    puzzle.runes.insert(
-        Vector2::new(1, 1),
-        Rune {
-            sigil: Sigil::Alpha,
-            orb: Orb::Circle,
-        },
-    );
-    puzzle.runes.insert(
-        Vector2::new(0, 2),
-        Rune {
-            sigil: Sigil::Alpha,
-            orb: Orb::Circle,
-        },
-    );
-    puzzle.runes.insert(
-        Vector2::new(2, 0),
-        Rune {
-            sigil: Sigil::Alpha,
-            orb: Orb::Circle,
-        },
-    );
-    puzzle.runes.insert(
-        Vector2::new(1, 2),
-        Rune {
-            sigil: Sigil::Alpha,
-            orb: Orb::Circle,
-        },
-    );
-    puzzle.runes.insert(
-        Vector2::new(2, 1),
-        Rune {
-            sigil: Sigil::Alpha,
-            orb: Orb::Circle,
-        },
-    );
-    puzzle.runes.insert(
-        Vector2::new(2, 2),
-        Rune {
-            sigil: Sigil::Alpha,
-            orb: Orb::Circle,
-        },
-    );
+    let mut ui = UI::new(&renderer.device, &event_loop);
+
+    for x in 0..3 {
+        for y in 0..3 {
+            puzzle.runes.insert(
+                Vector2::new(x, y),
+                Rune {
+                    sigil: Sigil::Alpha,
+                    orb: Orb::Circle,
+                },
+            );
+        }
+    }
 
     let sampler = renderer.pixel_art_sampler();
     let orbs_texture = sprite_renderer.create_texture_bind_group(
@@ -142,6 +94,18 @@ async fn game() {
             }
 
             let batches = puzzle.sprite_batches(&cursor_texture, &sigils_texture, &orbs_texture);
+            let ui_output = ui.update(
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.heading("My egui Application");
+                    });
+                },
+                &renderer.device,
+                &renderer.queue,
+                view,
+                &renderer.window,
+                [renderer.size.width, renderer.size.height],
+            );
 
             let commands = vec![
                 renderer.clear(
@@ -160,6 +124,7 @@ async fn game() {
                     view,
                     [renderer.size.width as f32, renderer.size.height as f32],
                 ),
+                ui_output,
             ];
 
             input.clear();
