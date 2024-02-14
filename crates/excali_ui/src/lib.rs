@@ -2,8 +2,8 @@ use egui::Context;
 use egui_wgpu::renderer::Renderer;
 use egui_wgpu::wgpu::{self, CommandBuffer, Device, Queue, TextureView};
 pub use egui_winit;
-use egui_winit::winit::event::WindowEvent;
-use egui_winit::winit::window::Window;
+use egui_winit::winit::event::{Event, WindowEvent};
+use egui_winit::winit::window::{Window, WindowId};
 
 pub struct UI {
     renderer: Renderer,
@@ -26,8 +26,21 @@ impl UI {
         }
     }
 
-    pub fn input(&mut self, window_event: &WindowEvent<'_>) -> egui_winit::EventResponse {
-        self.winit_state.on_event(&self.context, window_event)
+    pub fn handle_event(
+        &mut self,
+        event: &Event<()>,
+        id: WindowId,
+    ) -> Option<egui_winit::EventResponse> {
+        match event {
+            Event::WindowEvent { window_id, event } => {
+                if *window_id != id {
+                    None
+                } else {
+                    Some(self.winit_state.on_event(&self.context, event))
+                }
+            }
+            _ => None,
+        }
     }
 
     pub fn update(

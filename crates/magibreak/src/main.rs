@@ -83,6 +83,7 @@ async fn game() {
 
     event_loop.run(move |event, _, control_flow| {
         input.handle_event(&event);
+        ui.handle_event(&event, renderer.window.id());
 
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
             if input.left_mouse_click == InputState::JustPressed {
@@ -96,7 +97,7 @@ async fn game() {
             let batches = puzzle.sprite_batches(&cursor_texture, &sigils_texture, &orbs_texture);
             let ui_output = ui.update(
                 |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| {
+                    egui::Window::new("level editor").show(ctx, |ui| {
                         ui.heading("My egui Application");
                     });
                 },
