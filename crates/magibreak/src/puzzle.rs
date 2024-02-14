@@ -26,7 +26,7 @@ impl FromSigilCoordinate for Transform {
     }
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
+#[derive(Serialize, PartialEq, Eq, Deserialize, Copy, Clone)]
 pub enum Orb {
     Circle,
     Diamond,
@@ -46,6 +46,19 @@ impl ToString for Orb {
 impl Orb {
     fn allow_intersections(&self) -> bool {
         !matches!(self, Self::Circle)
+    }
+
+    // TODO delete colinear lines, maybe
+    fn effect(&self, coordinate: SigilCoordinate, to: SigilCoordinate, lines: &mut [Line]) {
+        if *self != Orb::Octogon {
+            return;
+        }
+        for line in lines.iter_mut() {
+            if line.end != coordinate {
+                continue;
+            }
+            line.end = to;
+        }
     }
 
     pub fn texture_coordinate(&self, active: bool) -> TextureCoordinate {
@@ -302,6 +315,7 @@ impl Puzzle {
             if !cursor_rune.orb.allow_intersections() && self.intersects_lines(&line) {
                 return;
             }
+            cursor_rune.orb.effect(self.cursor, *coordinate, &mut self.lines);
 
             if let Some(_rune) = self.runes.get(coordinate) {
                 self.lines.push(line);
