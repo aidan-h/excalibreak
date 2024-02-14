@@ -93,8 +93,13 @@ async fn game() {
     );
 
     event_loop.run(move |event, _, control_flow| {
-        input.handle_event(&event);
-        ui.handle_event(&event, renderer.window.id());
+        let consumed = if let Some(response) = ui.handle_event(&event, renderer.window.id()) {
+            response.consumed
+        } else {
+            false
+        };
+
+        input.handle_event(&event, consumed);
 
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
             let mouse_coordinate = if let Some(mouse_position) = input.mouse_position {
@@ -105,7 +110,7 @@ async fn game() {
                 None
             };
 
-            if input.left_mouse_click == InputState::JustPressed {
+            if !input.left_mouse_click.consumed && input.left_mouse_click.state == InputState::JustPressed {
                 if let Some(coordinate) = mouse_coordinate {
                     if !level_editor.enabled {
                         puzzle.input(&coordinate);

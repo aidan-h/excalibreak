@@ -14,6 +14,20 @@ impl MousePosition {
     }
 }
 
+#[derive(Default)]
+pub struct Button {
+    pub state: InputState,
+    /// if last state change was triggered inside UI
+    pub consumed: bool,
+}
+
+impl Button {
+    fn update(&mut self, state: &ElementState, consumed: bool) {
+        self.consumed = consumed;
+        self.state.update(state);
+    }
+}
+
 #[derive(Eq, PartialEq)]
 pub enum InputState {
     Pressed,
@@ -52,9 +66,9 @@ impl InputState {
 pub struct Input {
     pub mouse_position: Option<MousePosition>,
     pub window_id: WindowId,
-    pub left_mouse_click: InputState,
-    pub right_mouse_click: InputState,
-    pub middle_mouse_click: InputState,
+    pub left_mouse_click: Button,
+    pub right_mouse_click: Button,
+    pub middle_mouse_click: Button,
     cursor_device_id: Option<DeviceId>,
 }
 
@@ -71,12 +85,12 @@ impl Input {
     }
 
     pub fn clear(&mut self) {
-        self.left_mouse_click.step();
-        self.right_mouse_click.step();
-        self.middle_mouse_click.step();
+        self.left_mouse_click.state.step();
+        self.right_mouse_click.state.step();
+        self.middle_mouse_click.state.step();
     }
 
-    pub fn handle_event<T>(&mut self, event: &Event<T>)
+    pub fn handle_event<T>(&mut self, event: &Event<T>, consumed: bool)
     where
         T: 'static,
     {
@@ -93,9 +107,9 @@ impl Input {
                 } => {
                     if Some(*device_id) == self.cursor_device_id {
                         match button {
-                            MouseButton::Left => self.left_mouse_click.update(state),
-                            MouseButton::Right => self.right_mouse_click.update(state),
-                            MouseButton::Middle => self.middle_mouse_click.update(state),
+                            MouseButton::Left => self.left_mouse_click.update(state, consumed),
+                            MouseButton::Right => self.right_mouse_click.update(state, consumed),
+                            MouseButton::Middle => self.middle_mouse_click.update(state, consumed),
                             _ => {}
                         }
                     }
