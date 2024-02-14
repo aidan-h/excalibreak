@@ -4,6 +4,7 @@ use winit::event::VirtualKeyCode;
 pub struct Actions {
     pub undo: Action,
     pub debug: Action,
+    pub edit: Action,
     pub escape: Action,
     pub camera_forward: Action,
     pub camera_backward: Action,
@@ -13,12 +14,14 @@ pub struct Actions {
     pub camera_down: Action,
 }
 
+// TODO wrap both traits into a derive macro
 impl Default for Actions {
     fn default() -> Self {
         Self {
             undo: Action::new(VirtualKeyCode::U),
             escape: Action::new(VirtualKeyCode::Escape),
             debug: Action::new(VirtualKeyCode::F2),
+            edit: Action::new(VirtualKeyCode::F1),
             camera_forward: Action::new(VirtualKeyCode::W),
             camera_backward: Action::new(VirtualKeyCode::S),
             camera_left: Action::new(VirtualKeyCode::A),
@@ -41,6 +44,7 @@ impl InputMap for Actions {
             &mut self.camera_backward,
             &mut self.debug,
             &mut self.escape,
+            &mut self.edit,
         ]
     }
 }

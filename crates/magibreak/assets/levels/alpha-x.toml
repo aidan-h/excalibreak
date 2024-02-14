@@ -1,0 +1,41 @@
+cursor = [0, 0]
+
+[sigils."-1 0"]
+rune = "Alpha"
+orb = "Circle"
+
+[sigils."0 2"]
+rune = "Alpha"
+orb = "Circle"
+
+[sigils."0 0"]
+rune = "Alpha"
+orb = "Circle"
+
+[sigils."1 1"]
+rune = "Alpha"
+orb = "Circle"
+
+[sigils."1 2"]
+rune = "Alpha"
+orb = "Circle"
+
+[sigils."-1 1"]
+rune = "Alpha"
+orb = "Circle"
+
+[[lines]]
+start = [0, 1]
+end = [1, 0]
+
+[[lines]]
+start = [0, 1]
+end = [-1, 0]
+
+[[lines]]
+start = [0, 1]
+end = [-1, 2]
+
+[[lines]]
+start = [0, 1]
+end = [1, 2]

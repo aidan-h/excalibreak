@@ -8,6 +8,9 @@ use excali_sprite::*;
 use gcd::Gcd;
 use nalgebra::Vector2;
 
+use crate::map::grid::MapCoordinate;
+use crate::textures::Textures;
+
 const SIGIL_DISTANCE: f32 = 23.0;
 const LINE_WIDTH: f32 = 19.0;
 
@@ -419,13 +422,15 @@ impl Line {
 /// The puzzle which the player interacts with
 #[derive(Debug)]
 pub struct ActivePuzzle {
+    coordinate: MapCoordinate,
     puzzle: Puzzle,
     history: Vec<Puzzle>,
 }
 
 impl ActivePuzzle {
-    pub fn new(puzzle: Puzzle) -> Self {
+    pub fn new(puzzle: Puzzle, coordinate: MapCoordinate) -> Self {
         Self {
+            coordinate,
             puzzle,
             history: Vec::new(),
         }
@@ -444,30 +449,31 @@ impl ActivePuzzle {
         false
     }
 
-    pub fn input(&mut self, coordinate: &SigilCoordinate) {
+    /// returns if the input was processed
+    pub fn input(&mut self, coordinate: &SigilCoordinate) -> bool {
         let past = self.puzzle.clone();
         if self.puzzle.input(coordinate) {
             self.history.push(past);
+            return true;
         }
+        false
+    }
+
+    pub fn solved(&self) -> bool {
+        self.puzzle.solved()
     }
 
     pub fn sprite_batches<'a>(
-        &'a self,
+        &self,
         time: f32,
         camera: &Transform,
-        cursor_texture: &'a SpriteTexture,
-        sigils_texture: &'a SpriteTexture,
-        orbs_texture: &'a SpriteTexture,
-        line_texture: &'a SpriteTexture,
-    ) -> Vec<SpriteBatch> {
-        self.puzzle.sprite_batches(
-            time,
-            camera,
-            cursor_texture,
-            sigils_texture,
-            orbs_texture,
-            line_texture,
-        )
+        textures: &'a Textures,
+    ) -> Vec<SpriteBatch<'a>> {
+        self.puzzle.sprite_batches(time, camera, textures)
+    }
+
+    pub fn coordinate(&self) -> &MapCoordinate {
+        &self.coordinate
     }
 }
 
@@ -491,7 +497,7 @@ impl Default for Puzzle {
 impl Puzzle {
     /// returns if the input does anything
     pub fn input(&mut self, coordinate: &SigilCoordinate) -> bool {
-        if *coordinate == self.cursor {
+        if *coordinate == self.cursor || self.solved() {
             return false;
         }
         if let Some(cursor_rune) = self.sigils.get(&self.cursor) {
@@ -517,6 +523,15 @@ impl Puzzle {
         false
     }
 
+    pub fn solved(&self) -> bool {
+        for (coordinate, sigil) in self.sigils.iter() {
+            if !sigil.rune.active(*coordinate, &self.lines, &self.sigils) {
+                return false;
+            }
+        }
+        true
+    }
+
     fn intersects_lines(&self, line: &Line) -> bool {
         for other_line in self.lines.iter() {
             if other_line.intersects(line) {
@@ -527,14 +542,11 @@ impl Puzzle {
     }
 
     pub fn sprite_batches<'a>(
-        &'a self,
+        &self,
         time: f32,
         camera: &Transform,
-        cursor_texture: &'a SpriteTexture,
-        sigils_texture: &'a SpriteTexture,
-        orbs_texture: &'a SpriteTexture,
-        line_texture: &'a SpriteTexture,
-    ) -> Vec<SpriteBatch> {
+        textures: &'a Textures,
+    ) -> Vec<SpriteBatch<'a>> {
         let mut orb_sprites = Vec::<Sprite>::new();
         let mut sigil_sprites = Vec::<Sprite>::new();
 
@@ -565,7 +577,7 @@ impl Puzzle {
                 .iter()
                 .map(|line| line.sprite(time, camera))
                 .collect(),
-            texture: line_texture,
+            texture: &textures.line,
         };
 
         let cursor = SpriteBatch {
@@ -573,7 +585,7 @@ impl Puzzle {
                 transform: camera * &Transform::from_position(self.cursor.position()),
                 ..Default::default()
             }],
-            texture: cursor_texture,
+            texture: &textures.cursor,
         };
 
         vec![
@@ -581,11 +593,11 @@ impl Puzzle {
             cursor,
             SpriteBatch {
                 sprites: orb_sprites,
-                texture: orbs_texture,
+                texture: &textures.orbs,
             },
             SpriteBatch {
                 sprites: sigil_sprites,
-                texture: sigils_texture,
+                texture: &textures.sigils,
             },
         ]
     }

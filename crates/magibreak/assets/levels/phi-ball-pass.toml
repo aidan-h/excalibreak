@@ -1,0 +1,33 @@
+cursor = [-1, 1]
+
+[sigils."0 -3"]
+rune = "Alpha"
+orb = "Octogon"
+
+[sigils."-1 1"]
+rune = "Sigma"
+orb = "Circle"
+
+[sigils."1 0"]
+rune = "Alpha"
+orb = "Octogon"
+
+[sigils."0 -2"]
+rune = "Phi"
+orb = "Circle"
+
+[sigils."0 -1"]
+rune = "Alpha"
+orb = "Octogon"
+
+[sigils."-1 -2"]
+rune = "Alpha"
+orb = "Octogon"
+
+[sigils."0 0"]
+rune = "Phi"
+orb = "Circle"
+
+[[lines]]
+start = [0, 1]
+end = [0, -1]

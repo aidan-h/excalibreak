@@ -116,7 +116,19 @@ pub struct Transform {
 impl Transform {
     pub fn matrix(&self) -> Matrix4<f32> {
         Matrix4::new_translation(&self.position)
-            * (Matrix4::new_nonuniform_scaling(&self.scale) * self.rotation.to_homogeneous())
+            * (self.rotation.to_homogeneous() * Matrix4::new_nonuniform_scaling(&self.scale))
+    }
+
+    /// Creates a transfrom between two points, forming a line across the z-axis
+    pub fn line(a: &Vector3<f32>, b: &Vector3<f32>, thickness: f32) -> Self {
+        let direction = b - a;
+        let middle = (a + b) / 2.0;
+        let length = direction.magnitude();
+        Self {
+            position: middle,
+            scale: Vector3::new(thickness, thickness, length),
+            rotation: UnitQuaternion::face_towards(&direction, &Vector3::y()),
+        }
     }
 }
 

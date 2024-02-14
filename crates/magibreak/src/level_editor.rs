@@ -1,7 +1,8 @@
 use crate::puzzle::*;
+use crate::textures::Textures;
 use excali_io::tokio::sync::oneshot;
 use excali_io::{load_from_toml, receive_oneshot_rx, save_to_toml, tokio, OneShotStatus};
-use excali_sprite::{Color, Sprite, SpriteBatch, SpriteTexture, Transform};
+use excali_sprite::{Color, Sprite, SpriteBatch, Transform};
 use excali_ui::egui_winit::egui::{self, Context};
 use excali_ui::Mode;
 use log::error;
@@ -310,14 +311,11 @@ impl LevelEditor {
     }
 
     pub fn sprite_batches<'a>(
-        &'a self,
+        &self,
         camera: &Transform,
         mouse_coordinate: SigilCoordinate,
-        cursor_texture: &'a SpriteTexture,
-        sigils_texture: &'a SpriteTexture,
-        orbs_texture: &'a SpriteTexture,
-        border_texture: &'a SpriteTexture,
-    ) -> Option<Vec<SpriteBatch>> {
+        textures: &'a Textures,
+    ) -> Option<Vec<SpriteBatch<'a>>> {
         if !self.enabled {
             return None;
         }
@@ -332,7 +330,7 @@ impl LevelEditor {
                             texture_coordinate: self.rune.orb.texture_coordinate(false),
                             color: Color::new(1.0, 1.0, 1.0, 0.8),
                         }],
-                        texture: orbs_texture,
+                        texture: &textures.orbs,
                     },
                     SpriteBatch {
                         sprites: vec![Sprite {
@@ -340,7 +338,7 @@ impl LevelEditor {
                             texture_coordinate: self.rune.rune.texture_coordinate(),
                             color: Color::new(1.0, 1.0, 1.0, 0.8),
                         }],
-                        texture: sigils_texture,
+                        texture: &textures.sigils,
                     },
                 ])
             }
@@ -352,7 +350,7 @@ impl LevelEditor {
                         color: Color::new(1.0, 0.0, 0.0, 1.0),
                         ..Default::default()
                     }],
-                    texture: border_texture,
+                    texture: &textures.border,
                 }])
             }
             LevelEditorMode::Cursor => {
@@ -363,7 +361,7 @@ impl LevelEditor {
                         color: Color::new(1.0, 1.0, 1.0, 0.6),
                         ..Default::default()
                     }],
-                    texture: cursor_texture,
+                    texture: &textures.cursor,
                 }])
             }
             LevelEditorMode::Lines => {
@@ -384,7 +382,7 @@ impl LevelEditor {
 
                 Some(vec![SpriteBatch {
                     sprites,
-                    texture: cursor_texture,
+                    texture: &textures.cursor,
                 }])
             }
         }

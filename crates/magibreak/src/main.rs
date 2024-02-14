@@ -14,12 +14,15 @@ use excali_ui::*;
 use winit::event_loop::EventLoop;
 
 use self::input::*;
+use self::map::grid::MapCoordinate;
 use self::map::Map;
+use self::textures::*;
 
 mod input;
 mod level_editor;
 mod map;
 mod puzzle;
+mod textures;
 
 const STACK_SIZE: usize = 10_000_000;
 
@@ -53,10 +56,53 @@ struct PuzzlePlayer {
 }
 
 impl PuzzlePlayer {
-    async fn new(level: String) -> Self {
+    async fn new(level: String, coordinate: MapCoordinate) -> Self {
         let editor = LevelEditor::new(level + ".toml").await;
-        let puzzle = ActivePuzzle::new(editor.loaded_puzzle.clone());
+        let puzzle = ActivePuzzle::new(editor.loaded_puzzle.clone(), coordinate);
         Self { editor, puzzle }
+    }
+
+    /// return if solved
+    fn update<'a>(
+        &mut self,
+        batches: &mut Vec<SpriteBatch<'a>>,
+        camera: &Transform,
+        input: &Input<Actions>,
+        mouse_coordinate: Option<SigilCoordinate>,
+        textures: &'a Textures,
+        time: f32,
+    ) -> bool {
+        let undo_button = &input.input_map.undo.button;
+        let mut solved = false;
+        if !undo_button.consumed && undo_button.state == InputState::JustPressed {
+            self.puzzle.undo();
+        }
+        if !input.left_mouse_click.consumed
+            && input.left_mouse_click.state == InputState::JustPressed
+        {
+            if let Some(coordinate) = mouse_coordinate {
+                if !self.editor.enabled {
+                    if self.puzzle.input(&coordinate) && self.puzzle.solved() {
+                        solved = true;
+                    }
+                } else {
+                    self.editor.input(coordinate, &mut self.puzzle);
+                }
+            }
+        }
+        for batch in self.puzzle.sprite_batches(time, camera, textures).drain(..) {
+            batches.push(batch);
+        }
+        if let Some(coordinate) = mouse_coordinate {
+            if let Some(mut editor_batches) =
+                self.editor.sprite_batches(camera, coordinate, textures)
+            {
+                for batch in editor_batches.drain(..) {
+                    batches.push(batch);
+                }
+            }
+        }
+        solved
     }
 }
 
@@ -90,24 +136,11 @@ async fn game() {
     let sampler = renderer.pixel_art_sampler();
     let line_sampler = renderer.pixel_art_wrap_sampler();
 
-    let orbs_texture =
-        load_sprite_texture("assets/orbs.png", &sprite_renderer, &renderer, &sampler).await;
-    let border_texture =
-        load_sprite_texture("assets/border.png", &sprite_renderer, &renderer, &sampler).await;
-    let sigils_texture =
-        load_sprite_texture("assets/sigils.png", &sprite_renderer, &renderer, &sampler).await;
-    let cursor_texture =
-        load_sprite_texture("assets/cursor.png", &sprite_renderer, &renderer, &sampler).await;
-    let line_texture = load_sprite_texture(
-        "assets/line.png",
-        &sprite_renderer,
-        &renderer,
-        &line_sampler,
-    )
-    .await;
     let start_instant = Instant::now();
     let camera = Transform::from_scale(Vector2::new(2.0, 2.0));
+    let textures = Textures::new(&sprite_renderer, &renderer, &sampler, &line_sampler).await;
     let mut debug = false;
+    let mut edit = false;
 
     event_loop.run(move |event, _, control_flow| {
         input.handle_event(&event, ui.handle_event(&event, renderer.window.id()));
@@ -128,6 +161,10 @@ async fn game() {
                 debug = !debug;
             }
 
+            if input.input_map.edit.button.state == InputState::JustPressed {
+                edit = !edit;
+            }
+
             let time = renderer
                 .last_frame
                 .duration_since(start_instant)
@@ -137,10 +174,13 @@ async fn game() {
 
             let ui_output = ui.update(
                 |ctx| {
+                    if !edit {
+                        return;
+                    }
                     if let Some(player) = puzzle_player.as_mut() {
                         player.editor.ui(ctx, &mut player.puzzle);
                     } else {
-                        map.ui(ctx);
+                        map.edit_ui(ctx);
                     }
                 },
                 &renderer.device,
@@ -162,18 +202,21 @@ async fn game() {
                     OneShotStatus::Closed => error!("Load level channel closed"),
                     OneShotStatus::Value(player) => puzzle_player = Some(player),
                     OneShotStatus::None => {
-                        if let Some(zone_coordinate) = map.input(&input, renderer, delta) {
+                        if let Some(zone_coordinate) = map.input(&input, renderer, delta, edit) {
                             // TODO this is shit
                             let zone_name = map
                                 .grid
-                                .zones
+                                .zones()
                                 .get(&zone_coordinate)
                                 .unwrap()
+                                .zone
                                 .level_name
                                 .clone();
                             let (tx, rx) = oneshot::channel();
+                            let coordinate = zone_coordinate;
                             tokio::spawn(async move {
-                                tx.send(PuzzlePlayer::new(zone_name).await).unwrap();
+                                tx.send(PuzzlePlayer::new(zone_name, coordinate).await)
+                                    .unwrap();
                             });
                             load_puzzle_rx = Some(rx);
                         }
@@ -182,46 +225,17 @@ async fn game() {
                 }
             }
             if let Some(player) = puzzle_player.as_mut() {
-                if input.input_map.undo.button.state == InputState::JustPressed {
-                    player.puzzle.undo();
-                }
-                if !input.left_mouse_click.consumed
-                    && input.left_mouse_click.state == InputState::JustPressed
-                {
-                    if let Some(coordinate) = mouse_coordinate {
-                        if !player.editor.enabled {
-                            player.puzzle.input(&coordinate);
-                        }
-                        player.editor.input(coordinate, &mut player.puzzle);
-                    }
-                }
-                for batch in player
-                    .puzzle
-                    .sprite_batches(
-                        time,
-                        &camera,
-                        &cursor_texture,
-                        &sigils_texture,
-                        &orbs_texture,
-                        &line_texture,
-                    )
-                    .drain(..)
-                {
-                    batches.push(batch);
-                }
-                if let Some(coordinate) = mouse_coordinate {
-                    if let Some(mut editor_batches) = player.editor.sprite_batches(
-                        &camera,
-                        coordinate,
-                        &cursor_texture,
-                        &sigils_texture,
-                        &orbs_texture,
-                        &border_texture,
-                    ) {
-                        for batch in editor_batches.drain(..) {
-                            batches.push(batch);
-                        }
-                    }
+                if player.update(
+                    &mut batches,
+                    &camera,
+                    &input,
+                    mouse_coordinate,
+                    &textures,
+                    time,
+                ) {
+                    map.grid.complete_zone(player.puzzle.coordinate());
+                    // We don't want to force the player out but tell them to press ESC
+                    //puzzle_player = None;
                 }
             }
             // process map input if there isn't a level loaded
