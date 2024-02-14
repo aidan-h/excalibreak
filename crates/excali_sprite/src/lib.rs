@@ -9,11 +9,13 @@ pub struct WindowUnifrom {
     pub size: [f32; 2],
 }
 
+type VertexTextureCoordinate = [f32; 2];
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
     position: [f32; 2],
-    tex_coords: [f32; 2],
+    tex_coords: VertexTextureCoordinate,
 }
 
 impl Vertex {
@@ -63,9 +65,47 @@ pub struct SpriteRenderer {
     length: u16,
 }
 
+pub struct TextureCoordinate {
+    pub width: f32,
+    pub height: f32,
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Default for TextureCoordinate {
+    fn default() -> Self {
+        Self {
+            width: 1.0,
+            height: 1.0,
+            x: 0.0,
+            y: 0.0,
+            }
+    }
+
+}
+    impl TextureCoordinate {
+    fn bottom_left(&self) -> VertexTextureCoordinate {
+        [self.x, self.y]
+    }
+
+    fn bottom_right(&self) -> VertexTextureCoordinate {
+        [self.x + self.width, self.y]
+    }
+
+    fn top_left(&self) -> VertexTextureCoordinate {
+        [self.x, self.y + self.height]
+    }
+
+    fn top_right(&self) -> VertexTextureCoordinate {
+        [self.x + self.width, self.y + self.height]
+    }
+
+}
+
 pub struct Sprite {
     pub position: [f32; 2],
     pub size: [f32; 2],
+    pub texture_coordinate: TextureCoordinate,
 }
 
 impl Sprite {
@@ -82,19 +122,19 @@ impl Sprite {
         [
             Vertex {
                 position: [left, bottom],
-                tex_coords: [0.0, 0.0],
+                tex_coords: self.texture_coordinate.bottom_left(),
             },
             Vertex {
                 position: [right, bottom],
-                tex_coords: [1.0, 0.0],
+                tex_coords: self.texture_coordinate.bottom_right(),
             },
             Vertex {
                 position: [right, top],
-                tex_coords: [1.0, 1.0],
+                tex_coords: self.texture_coordinate.top_right(),
             },
             Vertex {
                 position: [left, top],
-                tex_coords: [0.0, 1.0],
+                tex_coords: self.texture_coordinate.top_left(),
             },
         ]
     }
@@ -281,7 +321,7 @@ impl SpriteRenderer {
 
     pub fn draw(
         &mut self,
-        sprite_batches: &Vec<SpriteBatch>,
+        sprite_batches: &[SpriteBatch],
         device: &Device,
         queue: &Queue,
         view: &TextureView,

@@ -9,4 +9,5 @@ edition = "2021"
 excali_render = { version = "0.1.0", path = "../excali_render" }
 excali_sprite = { version = "0.1.0", path = "../excali_sprite" }
 tokio = { version = "1", features = ["full"] }
+wgpu = "0.15.1"
 winit = "0.28.1"
