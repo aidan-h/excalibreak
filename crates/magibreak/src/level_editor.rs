@@ -1,11 +1,11 @@
 use crate::puzzle::*;
-use excali_sprite::{Color, Sprite, SpriteBatch, Transform};
+use excali_io::tokio;
+use excali_io::tokio::fs::File;
+use excali_io::tokio::io::{AsyncReadExt, AsyncWriteExt};
+use excali_io::tokio::sync::oneshot;
+use excali_sprite::{Color, Sprite, SpriteBatch, SpriteTexture, Transform};
 use excali_ui::egui_winit::egui::{self, Context};
 use log::error;
-use nalgebra::Vector2;
-use tokio::fs::File;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::oneshot;
 
 #[derive(Eq, PartialEq)]
 enum LevelEditorMode {
@@ -379,11 +379,12 @@ impl LevelEditor {
 
     pub fn sprite_batches<'a>(
         &'a self,
+        camera: &Transform,
         mouse_coordinate: SigilCoordinate,
-        cursor_texture: &'a wgpu::BindGroup,
-        sigils_texture: &'a wgpu::BindGroup,
-        orbs_texture: &'a wgpu::BindGroup,
-        border_texture: &'a wgpu::BindGroup,
+        cursor_texture: &'a SpriteTexture,
+        sigils_texture: &'a SpriteTexture,
+        orbs_texture: &'a SpriteTexture,
+        border_texture: &'a SpriteTexture,
     ) -> Option<Vec<SpriteBatch>> {
         if !self.enabled {
             return None;
@@ -391,7 +392,7 @@ impl LevelEditor {
 
         match self.mode {
             LevelEditorMode::Place => {
-                let transform = Transform::from_sigil_coordinate(mouse_coordinate);
+                let transform = Transform::from_sigil_coordinate(mouse_coordinate, camera);
                 Some(vec![
                     SpriteBatch {
                         sprites: vec![Sprite {
@@ -399,7 +400,7 @@ impl LevelEditor {
                             texture_coordinate: self.rune.orb.texture_coordinate(false),
                             color: Color::new(1.0, 1.0, 1.0, 0.8),
                         }],
-                        texture_bind_group: orbs_texture,
+                        texture: orbs_texture,
                     },
                     SpriteBatch {
                         sprites: vec![Sprite {
@@ -407,26 +408,26 @@ impl LevelEditor {
                             texture_coordinate: self.rune.rune.texture_coordinate(),
                             color: Color::new(1.0, 1.0, 1.0, 0.8),
                         }],
-                        texture_bind_group: sigils_texture,
+                        texture: sigils_texture,
                     },
                 ])
             }
             LevelEditorMode::Clear => {
-                let transform = Transform::from_sigil_coordinate(mouse_coordinate);
+                let transform = Transform::from_sigil_coordinate(mouse_coordinate, camera);
                 Some(vec![SpriteBatch {
                     sprites: vec![Sprite {
                         transform,
                         color: Color::new(1.0, 0.0, 0.0, 1.0),
                         ..Default::default()
                     }],
-                    texture_bind_group: border_texture,
+                    texture: border_texture,
                 }])
             }
             LevelEditorMode::Cursor => {
                 let transform = Transform {
                     position: mouse_coordinate.position(),
                     rotation: 0.0,
-                    scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
+                    scale: camera.scale,
                 };
                 Some(vec![SpriteBatch {
                     sprites: vec![Sprite {
@@ -434,14 +435,14 @@ impl LevelEditor {
                         color: Color::new(1.0, 1.0, 1.0, 0.6),
                         ..Default::default()
                     }],
-                    texture_bind_group: cursor_texture,
+                    texture: cursor_texture,
                 }])
             }
             LevelEditorMode::Lines => {
                 let transform = Transform {
                     position: mouse_coordinate.position(),
                     rotation: 0.0,
-                    scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
+                    scale: camera.scale,
                 };
                 let mut sprites = vec![Sprite {
                     transform,
@@ -454,7 +455,7 @@ impl LevelEditor {
                         transform: Transform {
                             position: start.position(),
                             rotation: 0.0,
-                            scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
+                            scale: camera.scale,
                         },
                         color: Color::new(1.0, 1.0, 1.0, 0.8),
                         ..Default::default()
@@ -463,7 +464,7 @@ impl LevelEditor {
 
                 Some(vec![SpriteBatch {
                     sprites,
-                    texture_bind_group: cursor_texture,
+                    texture: cursor_texture,
                 }])
             }
         }

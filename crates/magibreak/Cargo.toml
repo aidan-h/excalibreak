@@ -10,6 +10,7 @@ log = "0.4.17"
 toml = "0.7.2"
 wgpu = "0.15.1"
 winit = "0.28.1"
+excali_io = { version = "0.1.0", path = "../excali_io" }
 
 [dependencies.excali_input]
 version = "0.1.0"
@@ -39,8 +40,3 @@ default-features = false
 [dependencies.serde]
 version = "1.0.152"
 features = ["derive"]
-
-[dependencies.tokio]
-version = "1"
-features = ["rt-multi-thread", "io-util", "fs", "sync"]
-default-features = false

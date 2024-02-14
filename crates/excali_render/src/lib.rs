@@ -1,9 +1,17 @@
 use std::time::Instant;
 
+pub use wgpu;
 pub use wgpu::SurfaceError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
+
+pub struct Texture {
+    pub view: wgpu::TextureView,
+    pub width: u32,
+    pub height: u32,
+    pub name: String,
+}
 
 pub struct Renderer {
     pub surface: wgpu::Surface,
@@ -41,7 +49,7 @@ impl Renderer {
         })
     }
 
-    pub fn load_texture(&self, bytes: &[u8], label: Option<&str>) -> wgpu::TextureView {
+    pub fn load_texture(&self, bytes: &[u8], label: String) -> Texture {
         let diffuse_image = image::load_from_memory(bytes).unwrap();
         let diffuse_rgba = diffuse_image.to_rgba8();
 
@@ -65,7 +73,7 @@ impl Renderer {
             // TEXTURE_BINDING tells wgpu that we want to use this texture in shaders
             // COPY_DST means that we want to copy data to this texture
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            label,
+            label: Some(label.as_str()),
             // This is the same as with the SurfaceConfig. It
             // specifies what texture formats can be used to
             // create TextureViews for this texture. The base
@@ -95,7 +103,12 @@ impl Renderer {
             texture_size,
         );
 
-        diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default())
+        Texture {
+            view: diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            width: dimensions.0,
+            height: dimensions.1,
+            name: label,
+        }
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {

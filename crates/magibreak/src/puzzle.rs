@@ -7,23 +7,15 @@ use excali_sprite::*;
 use gcd::Gcd;
 use nalgebra::Vector2;
 
-const SIGIL_SIZE: f32 = 50.0;
-const SIGIL_SCALE: Vector2<f32> = Vector2::new(SIGIL_SIZE, SIGIL_SIZE);
-pub const CURSOR_SIZE: f32 = 70.0;
-
-const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
+const SIGIL_DISTANCE: f32 = 20.0;
 
 pub trait FromSigilCoordinate {
-    fn from_sigil_coordinate(coordinate: SigilCoordinate) -> Self;
+    fn from_sigil_coordinate(coordinate: SigilCoordinate, camera: &Transform) -> Self;
 }
 
 impl FromSigilCoordinate for Transform {
-    fn from_sigil_coordinate(coordinate: SigilCoordinate) -> Self {
-        Self {
-            position: coordinate.position(),
-            rotation: 0.0,
-            scale: SIGIL_SCALE,
-        }
+    fn from_sigil_coordinate(coordinate: SigilCoordinate, camera: &Transform) -> Self {
+        camera * &Transform::from_position(coordinate.position())
     }
 }
 
@@ -270,7 +262,7 @@ impl Line {
         false
     }
 
-    fn sprite(&self, time: f32) -> Sprite {
+    fn sprite(&self, time: f32, camera: &Transform) -> Sprite {
         let start = self.start.position();
         let end = self.end.position();
         let position = (start + end) / 2.0;
@@ -284,16 +276,17 @@ impl Line {
         };
 
         Sprite {
-            transform: Transform {
-                position,
-                rotation,
-                scale: Vector2::new(magnitude, SIGIL_SIZE),
-            },
+            transform: camera
+                * &Transform {
+                    position,
+                    rotation,
+                    scale: Vector2::new(1.0, 1.0),
+                },
             texture_coordinate: TextureCoordinate {
                 height: 1.0,
                 x: -time,
                 y: 0.0,
-                width: magnitude / SIGIL_SIZE,
+                width: magnitude / SIGIL_DISTANCE,
             },
             ..Default::default()
         }
@@ -435,13 +428,15 @@ impl ActivePuzzle {
     pub fn sprite_batches<'a>(
         &'a self,
         time: f32,
-        cursor_texture: &'a wgpu::BindGroup,
-        sigils_texture: &'a wgpu::BindGroup,
-        orbs_texture: &'a wgpu::BindGroup,
-        line_texture: &'a wgpu::BindGroup,
+        camera: &Transform,
+        cursor_texture: &'a SpriteTexture,
+        sigils_texture: &'a SpriteTexture,
+        orbs_texture: &'a SpriteTexture,
+        line_texture: &'a SpriteTexture,
     ) -> Vec<SpriteBatch> {
         self.puzzle.sprite_batches(
             time,
+            camera,
             cursor_texture,
             sigils_texture,
             orbs_texture,
@@ -505,20 +500,17 @@ impl Puzzle {
     pub fn sprite_batches<'a>(
         &'a self,
         time: f32,
-        cursor_texture: &'a wgpu::BindGroup,
-        sigils_texture: &'a wgpu::BindGroup,
-        orbs_texture: &'a wgpu::BindGroup,
-        line_texture: &'a wgpu::BindGroup,
+        camera: &Transform,
+        cursor_texture: &'a SpriteTexture,
+        sigils_texture: &'a SpriteTexture,
+        orbs_texture: &'a SpriteTexture,
+        line_texture: &'a SpriteTexture,
     ) -> Vec<SpriteBatch> {
         let mut orb_sprites = Vec::<Sprite>::new();
         let mut sigil_sprites = Vec::<Sprite>::new();
 
         for (coordinate, rune) in self.sigils.iter() {
-            let transform = Transform {
-                position: coordinate.position(),
-                rotation: 0.0,
-                scale: SIGIL_SCALE,
-            };
+            let transform = camera * &Transform::from_position(coordinate.position());
             let orb_coordinate = rune.orb.texture_coordinate(rune.rune.active(
                 *coordinate,
                 &self.lines,
@@ -539,20 +531,20 @@ impl Puzzle {
         }
 
         let lines = SpriteBatch {
-            sprites: self.lines.iter().map(|line| line.sprite(time)).collect(),
-            texture_bind_group: line_texture,
+            sprites: self
+                .lines
+                .iter()
+                .map(|line| line.sprite(time, camera))
+                .collect(),
+            texture: line_texture,
         };
 
         let cursor = SpriteBatch {
             sprites: vec![Sprite {
-                transform: Transform {
-                    scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
-                    position: self.cursor.position(),
-                    rotation: 0.0,
-                },
+                transform: camera * &Transform::from_position(self.cursor.position()),
                 ..Default::default()
             }],
-            texture_bind_group: cursor_texture,
+            texture: cursor_texture,
         };
 
         vec![
@@ -560,11 +552,11 @@ impl Puzzle {
             cursor,
             SpriteBatch {
                 sprites: orb_sprites,
-                texture_bind_group: orbs_texture,
+                texture: orbs_texture,
             },
             SpriteBatch {
                 sprites: sigil_sprites,
-                texture_bind_group: sigils_texture,
+                texture: sigils_texture,
             },
         ]
     }

@@ -1,6 +1,6 @@
+use excali_render::wgpu::util::DeviceExt;
+use excali_render::wgpu::*;
 use nalgebra::{Vector2, Vector4};
-use wgpu::util::DeviceExt;
-use wgpu::*;
 
 const STARTING_LENGTH: u16 = 16;
 
@@ -21,25 +21,25 @@ struct Vertex {
 }
 
 impl Vertex {
-    fn descriptor<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
+    fn descriptor<'a>() -> VertexBufferLayout<'a> {
+        VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as BufferAddress,
+            step_mode: VertexStepMode::Vertex,
             attributes: &[
-                wgpu::VertexAttribute {
+                VertexAttribute {
                     offset: 0,
                     shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x2,
+                    format: VertexFormat::Float32x2,
                 },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 2]>() as BufferAddress,
                     shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
+                    format: VertexFormat::Float32x2,
                 },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 4]>() as BufferAddress,
                     shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x4,
+                    format: VertexFormat::Float32x4,
                 },
             ],
         }
@@ -115,12 +115,71 @@ pub struct Transform {
     pub scale: Vector2<f32>,
 }
 
+impl std::ops::Mul for &Transform {
+    type Output = Transform;
+
+    #[allow(clippy::suspicious_arithmetic_impl)]
+    fn mul(self, rhs: Self) -> Self::Output {
+        let position = rhs.position.component_mul(&self.scale);
+        let cos = self.rotation.cos();
+        let sin = self.rotation.sin();
+        Self::Output {
+            scale: self.scale.component_mul(&rhs.scale),
+            rotation: self.rotation + rhs.rotation,
+            position: self.position
+                + Vector2::new(
+                    position.x * cos + position.y * -sin,
+                    position.x * sin + position.y * cos,
+                ),
+        }
+    }
+}
+
 impl Default for Transform {
     fn default() -> Self {
         Self {
             position: Vector2::zeros(),
             rotation: 0.0,
-            scale: Vector2::zeros(),
+            scale: Vector2::new(1.0, 1.0),
+        }
+    }
+}
+
+impl Transform {
+    pub fn to_object_space(&self, rhs: &Self) -> Self {
+        let position = (rhs.position - self.position).component_div(&self.scale);
+        let rotation = -self.rotation;
+        let sin = rotation.sin();
+        let cos = rotation.cos();
+
+        Self {
+            rotation: rhs.rotation + rotation,
+            scale: rhs.scale.component_div(&self.scale),
+            position: Vector2::new(
+                position.x * cos + position.y * -sin,
+                position.x * sin + position.y * cos,
+            ),
+        }
+    }
+
+    pub fn from_scale(scale: Vector2<f32>) -> Self {
+        Self {
+            scale,
+            ..Default::default()
+        }
+    }
+
+    pub fn from_position(position: Vector2<f32>) -> Self {
+        Self {
+            position,
+            ..Default::default()
+        }
+    }
+
+    pub fn from_rotation(rotation: f32) -> Self {
+        Self {
+            rotation,
+            ..Default::default()
         }
     }
 }
@@ -145,19 +204,26 @@ impl Default for Sprite {
 }
 
 impl Sprite {
-    fn vertices(&self) -> [Vertex; 4] {
+    fn vertices(&self, width: u32, height: u32) -> [Vertex; 4] {
         let position = self.transform.position;
         let rotation = self.transform.rotation;
-        let scale = self.transform.scale / 2.0;
+        let scale = self.transform.scale.component_mul(&Vector2::new(
+            width as f32 * self.texture_coordinate.width.abs(),
+            height as f32 * self.texture_coordinate.height.abs(),
+        )) / 2.0;
         let sin = rotation.sin();
         let cos = rotation.cos();
 
-        let mut top_right =Vector2::new(scale.x * cos + scale.y * sin, scale.y * cos - scale.x * sin);
+        let mut top_right =
+            Vector2::new(scale.x * cos + scale.y * sin, scale.y * cos - scale.x * sin);
         let bottom_left = position - top_right;
         top_right += position;
 
-        let mut top_left =Vector2::new(-scale.x * cos + scale.y * sin, scale.y * cos + scale.x * sin);
-        let bottom_right= position - top_left;
+        let mut top_left = Vector2::new(
+            -scale.x * cos + scale.y * sin,
+            scale.y * cos + scale.x * sin,
+        );
+        let bottom_right = position - top_left;
         top_left += position;
 
         [
@@ -185,25 +251,30 @@ impl Sprite {
     }
 }
 
+pub struct SpriteTexture {
+    pub bind_group: BindGroup,
+    pub data: excali_render::Texture,
+}
+
 #[derive(Clone)]
 pub struct SpriteBatch<'a> {
     pub sprites: Vec<Sprite>,
-    pub texture_bind_group: &'a BindGroup,
+    pub texture: &'a SpriteTexture,
 }
 
-fn create_vertex_buffer(sprite_count: u16, device: &Device) -> wgpu::Buffer {
+fn create_vertex_buffer(sprite_count: u16, device: &Device) -> Buffer {
     device.create_buffer_init(&util::BufferInitDescriptor {
         label: Some("Sprite Vertex Buffer"),
         contents: &vec![0u8; std::mem::size_of::<Vertex>() * (sprite_count * 4) as usize],
-        usage: wgpu::BufferUsages::VERTEX | BufferUsages::COPY_DST,
+        usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
     })
 }
 
-fn create_index_buffer(sprite_count: u16, device: &Device) -> wgpu::Buffer {
+fn create_index_buffer(sprite_count: u16, device: &Device) -> Buffer {
     let index_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
         label: Some("Sprite Index Buffer"),
         contents: bytemuck::cast_slice(&indices(sprite_count)),
-        usage: wgpu::BufferUsages::INDEX | BufferUsages::COPY_DST,
+        usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
     });
 
     index_buffer
@@ -222,37 +293,37 @@ impl SpriteRenderer {
         let index_buffer = create_index_buffer(STARTING_LENGTH, device);
 
         let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 entries: &[
-                    wgpu::BindGroupLayoutEntry {
+                    BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
                             multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
+                            sample_type: TextureSampleType::Float { filterable: true },
                         },
                         count: None,
                     },
-                    wgpu::BindGroupLayoutEntry {
+                    BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        visibility: ShaderStages::FRAGMENT,
                         // This should match the filterable field of the
                         // corresponding Texture entry above.
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],
-                label: Some("texture_bind_group_layout"),
+                label: Some("sprite_texture_bind_group_layout"),
             });
 
         let window_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                entries: &[BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
+                    visibility: ShaderStages::VERTEX,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -266,10 +337,10 @@ impl SpriteRenderer {
             size: [window_width, window_height],
         };
 
-        let window_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let window_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
             label: Some("Window Buffer"),
             contents: bytemuck::cast_slice(&[window_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
         let window_bind_group = device.create_bind_group(&BindGroupDescriptor {
@@ -281,54 +352,54 @@ impl SpriteRenderer {
             label: Some("window_bind_group"),
         });
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[&texture_bind_group_layout, &window_bind_group_layout],
             push_constant_ranges: &[],
         });
 
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
+            vertex: VertexState {
                 module: &shader,
                 entry_point: "vs_main",
                 buffers: &[Vertex::descriptor()],
             },
-            fragment: Some(wgpu::FragmentState {
+            fragment: Some(FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
+                targets: &[Some(ColorTargetState {
                     format: config.format,
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
+                    blend: Some(BlendState {
+                        color: BlendComponent {
+                            src_factor: BlendFactor::SrcAlpha,
+                            dst_factor: BlendFactor::OneMinusSrcAlpha,
+                            operation: BlendOperation::Add,
                         },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
+                        alpha: BlendComponent {
+                            src_factor: BlendFactor::One,
+                            dst_factor: BlendFactor::OneMinusSrcAlpha,
+                            operation: BlendOperation::Add,
                         },
                     }),
-                    write_mask: wgpu::ColorWrites::ALL,
+                    write_mask: ColorWrites::ALL,
                 })],
             }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
+                front_face: FrontFace::Ccw,
+                cull_mode: Some(Face::Back),
                 // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                polygon_mode: wgpu::PolygonMode::Fill,
+                polygon_mode: PolygonMode::Fill,
                 // Requires Features::DEPTH_CLIP_CONTROL
                 unclipped_depth: false,
                 // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
+            multisample: MultisampleState::default(),
             multiview: None,
         });
 
@@ -343,25 +414,25 @@ impl SpriteRenderer {
         }
     }
 
-    pub fn create_texture_bind_group(
+    pub fn create_bind_group(
         &self,
         device: &Device,
         sampler: &Sampler,
-        view: &TextureView,
+        texture: &excali_render::Texture,
     ) -> BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
+        device.create_bind_group(&BindGroupDescriptor {
             layout: &self.texture_bind_group_layout,
             entries: &[
-                wgpu::BindGroupEntry {
+                BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(view),
+                    resource: BindingResource::TextureView(&texture.view),
                 },
-                wgpu::BindGroupEntry {
+                BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
+                    resource: BindingResource::Sampler(sampler),
                 },
             ],
-            label: Some("world_bind_group"),
+            label: Some(&format!("{}_bind_group", texture.name)),
         })
     }
 
@@ -373,7 +444,7 @@ impl SpriteRenderer {
         view: &TextureView,
         window_size: [f32; 2],
     ) -> CommandBuffer {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("Sprite Command Encoder"),
         });
 
@@ -384,13 +455,13 @@ impl SpriteRenderer {
             bytemuck::cast_slice(&[WindowUnifrom { size: window_size }]),
         );
 
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Sprite Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(RenderPassColorAttachment {
                 view,
                 resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
+                ops: Operations {
+                    load: LoadOp::Load,
                     store: true,
                 },
             })],
@@ -401,7 +472,8 @@ impl SpriteRenderer {
 
         for batch in sprite_batches.iter() {
             for sprite in batch.sprites.iter() {
-                let sprite_vertices = sprite.vertices();
+                let sprite_vertices =
+                    sprite.vertices(batch.texture.data.width, batch.texture.data.height);
                 vertices.push(sprite_vertices[0]);
                 vertices.push(sprite_vertices[1]);
                 vertices.push(sprite_vertices[2]);
@@ -421,13 +493,13 @@ impl SpriteRenderer {
         queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
 
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
 
         let mut indices_offset = 0;
         for batch in sprite_batches.iter() {
             let sprite_indices = batch.sprites.len() as u32 * 6;
 
-            render_pass.set_bind_group(0, batch.texture_bind_group, &[]);
+            render_pass.set_bind_group(0, &batch.texture.bind_group, &[]);
             render_pass.draw_indexed(indices_offset..indices_offset + sprite_indices, 0, 0..1);
 
             indices_offset += sprite_indices;

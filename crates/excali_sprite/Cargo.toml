@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-wgpu = "0.15.1"
 bytemuck = { verstion = "1.13.0", features = ["derive"] }
+excali_render = { version = "0.1.0", path = "../excali_render" }
 nalgebra = { version = "0.32.1", default-features = false, features = ["serde-serialize"] }
