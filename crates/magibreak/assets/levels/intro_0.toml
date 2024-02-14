@@ -1,0 +1,10 @@
+lines = []
+cursor = [-1, 0]
+
+[runes."1 0"]
+sigil = "Alpha"
+orb = "Circle"
+
+[runes."-1 0"]
+sigil = "Alpha"
+orb = "Circle"

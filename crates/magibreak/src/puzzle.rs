@@ -1,4 +1,3 @@
-use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::num::ParseIntError;
@@ -218,63 +217,98 @@ impl Line {
         }
     }
 
-    fn cross(a: &Position, b: &Position) -> f32 {
-        a.x * b.y - a.y * b.x
-    }
-
     fn intersects(&self, other: &Self) -> bool {
-        // see https://stackoverflow.com/a/565282 
-        let p = Position::new(self.start.x as f32, self.start.y as f32);
-        let q = Position::new(other.start.x as f32, other.start.y as f32);
-        let r = Position::new(self.end.x as f32, self.end.y as f32) - p;
-        let s = Position::new(other.end.x as f32, other.end.y as f32) - q;
+        // uses https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
+        type Point = Vector2<i32>;
+        #[derive(Eq, PartialEq)]
+        enum Orientation {
+            Collinear,
+            Clockwise,
+            CounterClockwise,
+        }
 
-        let r_cross_s = Self::cross(&r, &s);
-        let q_minus_p = q - p;
-        let q_minus_p_cross_r = Self::cross(&q_minus_p, &r);
+        fn on_segment(a: Point, b: Point, c: Point) -> bool {
+            b.x <= a.x.max(c.x) && b.x >= a.x.min(c.x) && b.y <= a.y.max(c.y) && b.y >= a.y.min(c.y)
+        }
 
-        // avoid reversals
-        if self.start == other.end && self.end == other.start {
+        fn orientation(a: Point, b: Point, c: Point) -> Orientation {
+            let val = (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
+            if val == 0 {
+                Orientation::Collinear
+            } else if val > 0 {
+                Orientation::Clockwise
+            } else {
+                Orientation::CounterClockwise
+            }
+        }
+        // Find the four orientations needed for general and
+        // special cases
+        let o1 = orientation(self.start, self.end, other.start);
+        let o2 = orientation(self.start, self.end, other.end);
+        let o3 = orientation(other.start, other.end, self.start);
+        let o4 = orientation(other.start, other.end, self.end);
+
+        // can detatch by one point
+        if (o1 == Orientation::Collinear && o2 != Orientation::Collinear)
+            || (o2 == Orientation::Collinear && o1 != Orientation::Collinear)
+        {
+            return false;
+        }
+
+        if (o3 == Orientation::Collinear && o4 != Orientation::Collinear)
+            || (o4 == Orientation::Collinear && o3 != Orientation::Collinear)
+        {
+            return false;
+        }
+
+        // can extend in same direction
+        if o1 == Orientation::Collinear
+            && o2 == Orientation::Collinear
+            && (other.start.x.min(other.end.x) >= self.start.x.max(self.end.x)
+                || other.start.x.max(other.end.x) <= self.start.x.min(self.end.x))
+            && (other.start.y.min(other.end.y) >= self.start.y.max(self.end.y)
+                || other.start.y.max(other.end.y) <= self.start.y.min(self.end.y))
+        {
+            return false;
+        }
+
+        if o2 == Orientation::Collinear
+            && o3 == Orientation::Collinear
+            && (self.start.x.min(self.end.x) >= other.start.x.max(other.end.x)
+                || self.start.x.max(self.end.x) <= other.start.x.min(other.end.x))
+            && (self.start.y.min(self.end.y) >= other.start.y.max(other.end.y)
+                || self.start.y.max(self.end.y) <= other.start.y.min(other.end.y))
+        {
+            return false;
+        }
+
+        // General case
+        if o1 != o2 && o3 != o4 {
             return true;
         }
 
-        // are the lines are parallel?
-        if r_cross_s == 0.0 {
-            // are the lines collinear?
-            info!("{other:?}");
-            if q_minus_p_cross_r == 0.0 {
-                // original post doesn't workout parallel cases for this game
-                let min_x = self.start.x.min(self.end.x);
-                let max_x = self.start.x.max(self.end.x);
-                let min_y = self.start.y.min(self.end.y);
-                let max_y = self.start.y.max(self.end.y);
-                !((other.start.x >= max_x && other.end.x > max_x) || (other.end.x >= max_x && other.start.x > max_x) ||
-                (other.start.x <= min_x && other.end.x < min_x) || (other.end.x <= min_x && other.start.x < min_x) ||
-                (other.start.y >= max_y && other.end.y > max_y) || (other.end.y >= max_y && other.start.y > max_y) ||
-                (other.start.y <= min_y && other.end.y < min_y) || (other.end.y <= min_y && other.start.y < min_y))
-            } else {
-                false
-            }
-        } else {
-            // endpoints are not considered except in parallel scenario
-            if (self.start == other.start && self.end != other.end)
-                || (self.start == other.end && self.end != other.start)
-                || (self.end == other.start && self.start != other.end)
-                || (self.end == other.end && self.start != other.start)
-            {
-                return false;
-            }
-
-            // the lines are not parallel
-            let t = Self::cross(&q_minus_p, &(s / r_cross_s));
-            let u = Self::cross(&q_minus_p, &(r / r_cross_s));
-
-            // are the intersection coordinates both in range?
-            let t_in_range = (0.0..=1.0).contains(&t);
-            let u_in_range = (0.0..=1.0).contains(&u);
-
-            t_in_range && u_in_range
+        // Special Cas}
+        // p1, q1 and p2 are collinear and p2 lies on segment p1q1
+        if o1 == Orientation::Collinear && on_segment(self.start, other.start, self.end) {
+            return true;
         }
+
+        // p1, q1 and q2 are collinear and q2 lies on segment p1q1
+        if o2 == Orientation::Collinear && on_segment(self.start, other.end, self.end) {
+            return true;
+        }
+
+        // p2, q2 and p1 are collinear and p1 lies on segment p2q2
+        if o3 == Orientation::Collinear && on_segment(other.start, self.start, other.end) {
+            return true;
+        }
+
+        // p2, q2 and q1 are collinear and q1 lies on segment p2q2
+        if o4 == Orientation::Collinear && on_segment(other.start, self.end, other.end) {
+            return true;
+        }
+
+        false // Doesn't fall in any of the above cases
     }
 
     /// retrieves all touching coordinates
