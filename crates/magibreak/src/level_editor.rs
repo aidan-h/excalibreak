@@ -316,6 +316,14 @@ impl LevelEditor {
             }
             LevelEditorMode::Clear => {
                 self.loaded_puzzle.runes.remove(&coordinate);
+                // crappy ui ik but don't care rn
+                let mut new_lines = Vec::<Line>::new();
+                for line in self.loaded_puzzle.lines.iter() {
+                    if line.start != coordinate && line.end != coordinate {
+                        new_lines.push(*line);
+                    }
+                }
+                self.loaded_puzzle.lines = new_lines;
             }
             LevelEditorMode::Place => {
                 self.loaded_puzzle.runes.insert(coordinate, self.rune);

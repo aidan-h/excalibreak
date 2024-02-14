@@ -1,50 +1,14 @@
 cursor = [0, 0]
 
-[runes."0 -2"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."-1 0"]
-sigil = "Phi"
+[runes."2 1"]
+sigil = "Sigma"
 orb = "Circle"
 
 [runes."0 0"]
 sigil = "Alpha"
 orb = "Circle"
 
-[runes."-2 0"]
-sigil = "Alpha"
-orb = "Diamond"
-
-[runes."0 1"]
-sigil = "Phi"
-orb = "Circle"
-
-[runes."1 -2"]
-sigil = "Sigma"
-orb = "Circle"
-
-[runes."2 0"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."-2 -1"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."1 2"]
-sigil = "Sigma"
-orb = "Circle"
-
-[runes."2 -1"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."-2 1"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."0 -1"]
+[runes."-1 1"]
 sigil = "Phi"
 orb = "Circle"
 
@@ -52,46 +16,78 @@ orb = "Circle"
 sigil = "Phi"
 orb = "Circle"
 
-[runes."-1 2"]
-sigil = "Alpha"
+[runes."1 1"]
+sigil = "Phi"
+orb = "Circle"
+
+[runes."2 -1"]
+sigil = "Sigma"
 orb = "Circle"
 
 [runes."0 2"]
 sigil = "Alpha"
+orb = "Diamond"
+
+[runes."0 1"]
+sigil = "Phi"
+orb = "Circle"
+
+[runes."-2 1"]
+sigil = "Sigma"
+orb = "Circle"
+
+[runes."-2 0"]
+sigil = "Alpha"
+orb = "Diamond"
+
+[runes."0 -2"]
+sigil = "Alpha"
+orb = "Diamond"
+
+[runes."1 0"]
+sigil = "Phi"
+orb = "Circle"
+
+[runes."-1 2"]
+sigil = "Sigma"
+orb = "Circle"
+
+[runes."1 2"]
+sigil = "Sigma"
+orb = "Circle"
+
+[runes."0 -1"]
+sigil = "Phi"
+orb = "Circle"
+
+[runes."2 0"]
+sigil = "Alpha"
+orb = "Diamond"
+
+[runes."-1 -2"]
+sigil = "Sigma"
+orb = "Circle"
+
+[runes."-1 0"]
+sigil = "Phi"
+orb = "Circle"
+
+[runes."1 -2"]
+sigil = "Sigma"
+orb = "Circle"
+
+[runes."-2 -1"]
+sigil = "Sigma"
 orb = "Circle"
 
 [runes."1 -1"]
 sigil = "Phi"
 orb = "Circle"
 
-[runes."1 0"]
-sigil = "Phi"
-orb = "Circle"
-
-[runes."-1 1"]
-sigil = "Phi"
-orb = "Circle"
-
-[runes."-1 -2"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."1 1"]
-sigil = "Phi"
-orb = "Circle"
-
-[runes."2 1"]
-sigil = "Alpha"
-orb = "Circle"
+[[lines]]
+start = [0, 3]
+end = [2, -2]
 
 [[lines]]
-start = [-2, 2]
-end = [3, -1]
-
-[[lines]]
-start = [0, -3]
-end = [2, 2]
-
-[[lines]]
-start = [2, -2]
-end = [-3, 0]
+start = [0, 3]
+end = [-2, -2]
