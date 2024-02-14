@@ -1,0 +1,38 @@
+lines = []
+cursor = [0, 0]
+
+[sigils."0 0"]
+rune = "Delta"
+orb = "Circle"
+
+[sigils."0 -3"]
+rune = "Sigma"
+orb = "Diamond"
+
+[sigils."0 3"]
+rune = "Sigma"
+orb = "Diamond"
+
+[sigils."-1 1"]
+rune = "Delta"
+orb = "Circle"
+
+[sigils."1 -1"]
+rune = "Delta"
+orb = "Circle"
+
+[sigils."3 0"]
+rune = "Sigma"
+orb = "Diamond"
+
+[sigils."-3 0"]
+rune = "Sigma"
+orb = "Diamond"
+
+[sigils."1 1"]
+rune = "Delta"
+orb = "Circle"
+
+[sigils."-1 -1"]
+rune = "Delta"
+orb = "Circle"
