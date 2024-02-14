@@ -53,6 +53,7 @@ pub struct LevelEditor {
     levels: Vec<String>,
     levels_rx: Option<oneshot::Receiver<Result<Vec<String>, String>>>,
     save_rx: Option<oneshot::Receiver<Result<(), String>>>,
+    delete_rx: Option<oneshot::Receiver<Result<(), String>>>,
     load_rx: Option<oneshot::Receiver<Result<Puzzle, String>>>,
     rune: Rune,
 }
@@ -69,6 +70,7 @@ impl LevelEditor {
             save_rx: None,
             load_rx: None,
             levels_rx: None,
+            delete_rx: None,
             rune: Rune {
                 sigil: Sigil::Alpha,
                 orb: Orb::Circle,
@@ -116,82 +118,68 @@ impl LevelEditor {
     }
 
     pub fn ui(&mut self, ctx: &Context, puzzle: &mut Puzzle) {
-        egui::Window::new("level editor").show(ctx, |ui| {
-            if ui
-                .button(if self.enabled { "Play" } else { "Edit" })
-                .clicked()
-            {
-                self.toggle(puzzle);
-            }
-            if !self.enabled {
-                return;
-            }
-
-            ui.label("Mode");
-            if ui.button(self.mode.to_string()).clicked() {
-                self.change_mode();
-            }
-
-            if self.mode == LevelEditorMode::Place {
-                ui.label("Sigil");
-                if ui.button(self.rune.sigil.to_string()).clicked() {
-                    self.change_sigil();
-                }
-
-                ui.label("Orb");
-                if ui.button(self.rune.orb.to_string()).clicked() {
-                    self.change_orb();
-                }
-            }
-
-            ui.add(egui::TextEdit::singleline(&mut self.file_name));
-
-            // saving
-            if let Some(save_rx) = self.save_rx.as_mut() {
-                match save_rx.try_recv() {
-                    Ok(..) => {
-                        self.save_rx = None;
-                        // refresh levels list
+        if let Some(rx) = self.delete_rx.as_mut() {
+            if let Ok(val) = rx.try_recv() {
+                match val {
+                    Ok(_) => {
                         self.load_levels();
                     }
-                    Err(err) => match err {
-                        oneshot::error::TryRecvError::Empty => {
-                            ui.label("Saving");
-                        }
-                        oneshot::error::TryRecvError::Closed => {
-                            self.save_rx = None;
-                            error!("Save channel unexpectantly closed");
-                        }
-                    },
+                    Err(err) => error!("{err}"),
                 };
-            } else if ui.button("Save").clicked() {
-                self.save_level();
             }
+        }
 
-            // loading
-            if let Some(load_rx) = self.load_rx.as_mut() {
-                match load_rx.try_recv() {
-                    Ok(new_puzzle) => {
-                        match new_puzzle {
-                            Ok(new_puzzle) => {
-                                self.loaded_puzzle = new_puzzle.clone();
-                                *puzzle = new_puzzle;
-                            }
-                            Err(err) => error!("{err}"),
-                        };
-                        self.load_rx = None;
-                    }
-                    Err(err) => match err {
-                        oneshot::error::TryRecvError::Closed => {
-                            self.load_rx = None;
-                            error!("Puzzle load channel closed unexpectantly")
+        egui::Window::new("levels").show(ctx, |ui| {
+            ui.add(egui::TextEdit::singleline(&mut self.file_name));
+
+            ui.horizontal(|ui| {
+                // saving
+                if let Some(save_rx) = self.save_rx.as_mut() {
+                    match save_rx.try_recv() {
+                        Ok(..) => {
+                            self.save_rx = None;
+                            // refresh levels list
+                            self.load_levels();
                         }
-                        oneshot::error::TryRecvError::Empty => {}
-                    },
+                        Err(err) => match err {
+                            oneshot::error::TryRecvError::Empty => {
+                                ui.label("Saving");
+                            }
+                            oneshot::error::TryRecvError::Closed => {
+                                self.save_rx = None;
+                                error!("Save channel unexpectantly closed");
+                            }
+                        },
+                    };
+                } else if ui.button("Save").clicked() {
+                    self.save_level();
                 }
-            } else if ui.button("Load").clicked() {
-                self.load_level();
-            }
+
+                // loading
+                if let Some(load_rx) = self.load_rx.as_mut() {
+                    match load_rx.try_recv() {
+                        Ok(new_puzzle) => {
+                            match new_puzzle {
+                                Ok(new_puzzle) => {
+                                    self.loaded_puzzle = new_puzzle.clone();
+                                    *puzzle = new_puzzle;
+                                }
+                                Err(err) => error!("{err}"),
+                            };
+                            self.load_rx = None;
+                        }
+                        Err(err) => match err {
+                            oneshot::error::TryRecvError::Closed => {
+                                self.load_rx = None;
+                                error!("Puzzle load channel closed unexpectantly")
+                            }
+                            oneshot::error::TryRecvError::Empty => {}
+                        },
+                    }
+                } else if ui.button("Load").clicked() {
+                    self.load_level();
+                }
+            });
 
             // levels
             ui.label("Levels");
@@ -215,15 +203,71 @@ impl LevelEditor {
                     },
                 },
                 None => {
-                    for level in self.levels.iter() {
-                        if ui.button(level).clicked() {
-                            self.file_name = level.to_string();
-                            self.load_level();
-                            break;
-                        }
+                    for level in self.levels.clone().drain(..) {
+                        ui.horizontal(|ui| {
+                            ui.menu_button("edit", |ui| {
+                                if ui.button("Delete").clicked() {
+                                    self.delete_level(level.clone());
+                                }
+                            });
+                            if ui.button(level.clone()).clicked() {
+                                self.file_name = level;
+                                self.load_level();
+                            }
+                        });
                     }
                 }
             }
+        });
+
+        egui::Window::new("level editor").show(ctx, |ui| {
+            if ui
+                .button(if self.enabled { "Play" } else { "Edit" })
+                .clicked()
+            {
+                self.toggle(puzzle);
+            }
+            if !self.enabled {
+                return;
+            }
+
+            ui.horizontal(|ui| {
+                ui.label("Mode");
+                if ui.button(self.mode.to_string()).clicked() {
+                    self.change_mode();
+                }
+            });
+
+            if self.mode == LevelEditorMode::Place {
+                ui.horizontal(|ui| {
+                    ui.label("Sigil");
+                    if ui.button(self.rune.sigil.to_string()).clicked() {
+                        self.change_sigil();
+                    }
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Orb");
+                    if ui.button(self.rune.orb.to_string()).clicked() {
+                        self.change_orb();
+                    }
+                });
+            }
+        });
+    }
+
+    fn delete_level(&mut self, level: String) {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.delete_rx = Some(rx);
+
+        tokio::spawn(async move {
+            tx.send(
+                match tokio::fs::remove_file(format!("{}{}", LEVELS_PATH, level)).await {
+                    Ok(_) => Ok(()),
+                    Err(err) => Err(err.to_string()),
+                },
+            )
+            .unwrap();
         });
     }
 
@@ -235,21 +279,16 @@ impl LevelEditor {
         self.save_rx = Some(rx);
 
         tokio::spawn(async move {
-            match File::create(format!("{}{}", LEVELS_PATH, file_name)).await {
-                Ok(mut file) => {
-                    match file.write_all(string.as_bytes()).await {
-                        Ok(()) => {
-                            tx.send(Ok(())).unwrap();
-                        }
-                        Err(err) => {
-                            tx.send(Err(format!("{err}"))).unwrap();
-                        }
-                    };
-                }
-                Err(err) => {
-                    tx.send(Err(format!("{err}"))).unwrap();
-                }
-            }
+            tx.send(
+                match File::create(format!("{}{}", LEVELS_PATH, file_name)).await {
+                    Ok(mut file) => match file.write_all(string.as_bytes()).await {
+                        Ok(()) => Ok(()),
+                        Err(err) => Err(format!("{err}")),
+                    },
+                    Err(err) => Err(format!("{err}")),
+                },
+            )
+            .unwrap();
         });
     }
 
