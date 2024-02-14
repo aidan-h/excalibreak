@@ -418,6 +418,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
 
 [[package]]
+name = "excali_input"
+version = "0.1.0"
+dependencies = [
+ "winit",
+]
+
+[[package]]
 name = "excali_render"
 version = "0.1.0"
 dependencies = [
@@ -786,6 +793,7 @@ dependencies = [
 name = "magibreak"
 version = "0.1.0"
 dependencies = [
+ "excali_input",
  "excali_render",
  "excali_sprite",
  "nalgebra",

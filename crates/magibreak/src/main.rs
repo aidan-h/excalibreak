@@ -1,3 +1,4 @@
+use excali_input::*;
 use excali_render::*;
 use excali_sprite::*;
 use nalgebra::Vector2;
@@ -63,6 +64,13 @@ impl SigilCoordinate {
             self.0.y as f32 * SIGIL_DISTANCE - SIGIL_OFFSET,
         )
     }
+
+    fn from_position(position: Vector2<f32>) -> Self {
+        SigilCoordinate(Vector2::new(
+            ((position.x + SIGIL_OFFSET) / SIGIL_DISTANCE + 0.5).floor() as usize,
+            ((position.y + SIGIL_OFFSET) / SIGIL_DISTANCE + 0.5).floor() as usize,
+        ))
+    }
 }
 
 struct Puzzle {
@@ -80,6 +88,14 @@ impl Default for Puzzle {
 }
 
 impl Puzzle {
+    fn get_sigil_mut(&mut self, coordinate: &SigilCoordinate) -> Option<&mut Option<Sigil>> {
+        if coordinate.0.x >= PUZZLE_SIZE || coordinate.0.y >= PUZZLE_SIZE {
+            return None;
+        }
+
+        Some(&mut self.sigils[coordinate.0.y][coordinate.0.x])
+    }
+
     fn sprite_batches<'a>(
         &'a self,
         cursor_texture: &'a wgpu::BindGroup,
@@ -132,6 +148,7 @@ async fn game() {
         renderer.size.height as f32,
     );
     let mut puzzle = Puzzle::default();
+    let mut input = Input::new(renderer.window.id());
     puzzle.sigils[0][0] = Some(Sigil { active: true });
 
     let sampler = renderer.pixel_art_sampler();
@@ -152,7 +169,22 @@ async fn game() {
     );
 
     event_loop.run(move |event, _, control_flow| {
+        input.handle_event(&event);
+
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
+            if input.left_mouse_click {
+                if let Some(mouse_position) = input.mouse_position {
+                    if let Some(sigil) = puzzle.get_sigil_mut(&SigilCoordinate::from_position(
+                        mouse_position.world_position(&renderer.size).into(),
+                    )) {
+                        *sigil = Some(Sigil { active: true });
+                    }
+                }
+            }
+
+            let batches =
+                Vec::<SpriteBatch>::from(puzzle.sprite_batches(&cursor_texture, &sigils_texture));
+
             let commands = vec![
                 renderer.clear(
                     view,
@@ -164,13 +196,15 @@ async fn game() {
                     },
                 ),
                 sprite_renderer.draw(
-                    &puzzle.sprite_batches(&cursor_texture, &sigils_texture),
+                    &batches,
                     &renderer.device,
                     &renderer.queue,
                     view,
                     [renderer.size.width as f32, renderer.size.height as f32],
                 ),
             ];
+
+            input.clear();
             commands
         }) {
             println!("{err}");
