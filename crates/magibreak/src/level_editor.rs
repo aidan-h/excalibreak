@@ -12,6 +12,7 @@ enum LevelEditorMode {
     Clear,
     Cursor,
     Place,
+    Lines,
 }
 
 impl ToString for LevelEditorMode {
@@ -20,6 +21,7 @@ impl ToString for LevelEditorMode {
             Self::Clear => "Clear".to_string(),
             Self::Cursor => "Cursor".to_string(),
             Self::Place => "Place".to_string(),
+            Self::Lines => "Lines".to_string(),
         }
     }
 }
@@ -55,6 +57,7 @@ pub struct LevelEditor {
     save_rx: Option<oneshot::Receiver<Result<(), String>>>,
     delete_rx: Option<oneshot::Receiver<Result<(), String>>>,
     load_rx: Option<oneshot::Receiver<Result<Puzzle, String>>>,
+    line_start: Option<SigilCoordinate>,
     rune: Rune,
 }
 
@@ -71,6 +74,7 @@ impl LevelEditor {
             load_rx: None,
             levels_rx: None,
             delete_rx: None,
+            line_start: None,
             rune: Rune {
                 sigil: Sigil::Alpha,
                 orb: Orb::Circle,
@@ -316,6 +320,20 @@ impl LevelEditor {
             LevelEditorMode::Place => {
                 self.loaded_puzzle.runes.insert(coordinate, self.rune);
             }
+            LevelEditorMode::Lines => match self.line_start {
+                Some(start) => {
+                    if coordinate != start {
+                        self.line_start = None;
+                        self.loaded_puzzle.lines.push(Line {
+                            start,
+                            end: coordinate,
+                        });
+                    }
+                }
+                None => {
+                    self.line_start = Some(coordinate);
+                }
+            },
         };
         *puzzle = self.loaded_puzzle.clone();
     }
@@ -329,7 +347,8 @@ impl LevelEditor {
         self.mode = match self.mode {
             LevelEditorMode::Clear => LevelEditorMode::Cursor,
             LevelEditorMode::Cursor => LevelEditorMode::Place,
-            LevelEditorMode::Place => LevelEditorMode::Clear,
+            LevelEditorMode::Place => LevelEditorMode::Lines,
+            LevelEditorMode::Lines => LevelEditorMode::Clear,
         };
     }
 
@@ -405,6 +424,35 @@ impl LevelEditor {
                         color: Color::new(1.0, 1.0, 1.0, 0.6),
                         ..Default::default()
                     }],
+                    texture_bind_group: cursor_texture,
+                }])
+            }
+            LevelEditorMode::Lines => {
+                let transform = Transform {
+                    position: mouse_coordinate.position(),
+                    rotation: 0.0,
+                    scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
+                };
+                let mut sprites = vec![Sprite {
+                    transform,
+                    color: Color::new(1.0, 1.0, 1.0, 0.6),
+                    ..Default::default()
+                }];
+
+                if let Some(start) = self.line_start {
+                    sprites.push(Sprite {
+                        transform: Transform {
+                            position: start.position(),
+                            rotation: 0.0,
+                            scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
+                        },
+                        color: Color::new(1.0, 1.0, 1.0, 0.8),
+                        ..Default::default()
+                    });
+                }
+
+                Some(vec![SpriteBatch {
+                    sprites,
                     texture_bind_group: cursor_texture,
                 }])
             }
