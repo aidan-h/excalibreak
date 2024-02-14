@@ -1,5 +1,4 @@
 use excali_3d::*;
-use wgpu::util::DeviceExt;
 use wgpu::Device;
 
 use crate::map::grid::CHUNK_SIZE;
@@ -525,23 +524,5 @@ pub fn from_marching_squares(device: &Device, grid: &Grid) -> Model {
             }
         }
     }
-
-    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Map Vertex Buffer"),
-        contents: bytemuck::cast_slice(vertices.as_slice()),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
-
-    let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Map Index Buffer"),
-        contents: bytemuck::cast_slice(indices.as_slice()),
-        usage: wgpu::BufferUsages::INDEX,
-    });
-    let indices = indices.len() as u32;
-
-    Model {
-        vertex_buffer,
-        index_buffer,
-        indices,
-    }
+    Model::new(device, vertices, indices, "Map".to_string())
 }

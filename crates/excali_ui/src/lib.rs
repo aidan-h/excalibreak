@@ -26,11 +26,7 @@ impl UI {
         }
     }
 
-    pub fn handle_event(
-        &mut self,
-        event: &Event<()>,
-        id: WindowId,
-    ) -> bool {
+    pub fn handle_event(&mut self, event: &Event<()>, id: WindowId) -> bool {
         match event {
             Event::WindowEvent { window_id, event } => {
                 if *window_id != id {
@@ -90,5 +86,17 @@ impl UI {
             .render(&mut render_pass, &triangles, &descriptor);
         drop(render_pass);
         encoder.finish()
+    }
+}
+
+pub trait Mode: ToString + std::marker::Sized {
+    fn change(&self) -> Self;
+    fn ui(&mut self, ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) {
+        ui.horizontal(|ui| {
+            ui.label(text);
+            if ui.button(self.to_string()).clicked() {
+                *self = self.change();
+            }
+        });
     }
 }

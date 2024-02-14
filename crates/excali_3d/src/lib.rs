@@ -9,6 +9,29 @@ pub struct Model {
     pub indices: u32,
 }
 
+impl Model {
+    pub fn new(device: &Device, vertices: Vec<Vertex>, indices: Vec<u16>, name: String) -> Self {
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some((name.clone() + " Vertex Buffer").as_str()),
+            contents: bytemuck::cast_slice(vertices.as_slice()),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some((name + " Index Buffer").as_str()),
+            contents: bytemuck::cast_slice(indices.as_slice()),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        let indices = indices.len() as u32;
+
+        Self {
+            vertex_buffer,
+            index_buffer,
+            indices,
+        }
+    }
+}
+
 struct DepthTexture {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
@@ -213,7 +236,7 @@ impl Renderer3D {
             targets: &targets,
         });
         let debug_render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("3D Render Pipeline"),
+            label: Some("3D Debug Render Pipeline"),
             layout,
             vertex: vertex.clone(),
             fragment: fragment.clone(),
@@ -241,7 +264,7 @@ impl Renderer3D {
                 topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: FrontFace::Ccw,
-                cull_mode: Some(Face::Front),
+                cull_mode: Some(Face::Back),
                 polygon_mode: PolygonMode::Fill,
                 // Requires Features::DEPTH_CLIP_CONTROL
                 unclipped_depth: false,
@@ -294,24 +317,13 @@ pub struct Camera {
     pub zfar: f32,
 }
 
-#[rustfmt::skip]
-const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.0,
-    0.0, 0.0, 0.5, 1.0,
-);
-
 impl Camera {
-    fn projection_matrix(&self) -> Matrix4<f32> {
-        let view = Matrix4::<f32>::look_at_rh(
-            &Point3::new(-self.eye.x, self.eye.y, self.eye.z),
-            &Point3::new(-self.target.x, self.target.y, self.target.z),
-            &self.up,
-        );
-        let projection =
-            Matrix4::<f32>::new_perspective(self.aspect, self.fovy, self.znear, self.zfar);
-        OPENGL_TO_WGPU_MATRIX * projection * view
+    pub fn projection_matrix(&self) -> Matrix4<f32> {
+        Matrix4::<f32>::new_perspective(self.aspect, self.fovy, self.znear, self.zfar) * self.view()
+    }
+
+    pub fn view(&self) -> Matrix4<f32> {
+        Matrix4::<f32>::look_at_rh(&self.eye, &self.target, &self.up)
     }
 
     /// process input as a fly camera

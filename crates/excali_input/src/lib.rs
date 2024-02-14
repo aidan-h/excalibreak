@@ -3,13 +3,20 @@ use winit::event::{DeviceId, ElementState, Event, MouseButton, VirtualKeyCode, W
 use winit::window::WindowId;
 
 #[derive(Copy, Clone)]
-pub struct MousePosition(PhysicalPosition<f64>);
+pub struct MousePosition(pub PhysicalPosition<f64>);
 
 impl MousePosition {
     pub fn world_position(&self, screen_size: &PhysicalSize<u32>) -> [f32; 2] {
         [
             self.0.x as f32 - screen_size.width as f32 / 2.0,
             -self.0.y as f32 + screen_size.height as f32 / 2.0,
+        ]
+    }
+
+    pub fn clip_space(&self, screen_size: &PhysicalSize<u32>) -> [f32; 2] {
+        [
+            self.0.x as f32 / screen_size.width as f32 * 2.0 - 1.0,
+            (1.0 - self.0.y as f32 / screen_size.height as f32) * 2.0 - 1.0,
         ]
     }
 }

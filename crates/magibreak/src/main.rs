@@ -1,3 +1,4 @@
+use excali_io::load_from_toml;
 use excali_io::{load_file, tokio};
 use nalgebra::Vector2;
 use nalgebra::Vector3;
@@ -12,7 +13,6 @@ use excali_sprite::*;
 use excali_ui::*;
 use winit::event_loop::EventLoop;
 
-use self::map::grid::Grid;
 use self::map::Map;
 
 mod level_editor;
@@ -113,7 +113,11 @@ async fn game() {
 
     let mut input = Input::new(renderer.window.id(), Actions::default());
     let mut ui = UI::new(&renderer.device, &event_loop);
-    let mut map = Map::new(Grid::from_noise(), &renderer.config, &renderer.device);
+    let mut map = Map::new(
+        load_from_toml(map::grid::MAP_FILE_PATH).await.unwrap(),
+        &renderer.config,
+        &renderer.device,
+    );
 
     let sampler = renderer.pixel_art_sampler();
     let line_sampler = renderer.pixel_art_wrap_sampler();
@@ -168,11 +172,11 @@ async fn game() {
                 }
 
                 if input.input_map.camera_left.button.state.pressed() {
-                    direction -= Vector3::new(1.0, 0.0, 0.0);
+                    direction += Vector3::new(1.0, 0.0, 0.0);
                 }
 
                 if input.input_map.camera_right.button.state.pressed() {
-                    direction += Vector3::new(1.0, 0.0, 0.0);
+                    direction -= Vector3::new(1.0, 0.0, 0.0);
                 }
 
                 if input.input_map.camera_up.button.state.pressed() {
@@ -195,7 +199,21 @@ async fn game() {
                 .as_secs_f32();
 
             let mut batches = Vec::<SpriteBatch>::new();
-            let mut ui_output: Option<wgpu::CommandBuffer> = None;
+
+            let ui_output = ui.update(
+                |ctx| {
+                    if let Some(player) = puzzle_player.as_mut() {
+                        player.editor.ui(ctx, &mut player.puzzle);
+                    }
+                    map.ui(ctx);
+                },
+                &renderer.device,
+                &renderer.queue,
+                view,
+                &renderer.window,
+                [renderer.size.width, renderer.size.height],
+            );
+            map.input(&input, renderer);
 
             if let Some(player) = puzzle_player.as_mut() {
                 if input.input_map.undo.button.state == InputState::JustPressed {
@@ -211,16 +229,6 @@ async fn game() {
                         player.editor.input(coordinate, &mut player.puzzle);
                     }
                 }
-                ui_output = Some(ui.update(
-                    |ctx| {
-                        player.editor.ui(ctx, &mut player.puzzle);
-                    },
-                    &renderer.device,
-                    &renderer.queue,
-                    view,
-                    &renderer.window,
-                    [renderer.size.width, renderer.size.height],
-                ));
                 for batch in player
                     .puzzle
                     .sprite_batches(
@@ -251,29 +259,27 @@ async fn game() {
                 }
             }
 
-            let mut commands = vec![
-                renderer.clear(
-                    view,
-                    wgpu::Color {
-                        r: 0.4,
-                        g: 0.4,
-                        b: 0.4,
-                        a: 1.0,
-                    },
-                ),
-                map.draw(renderer, view, debug),
-                sprite_renderer.draw(
-                    &batches,
-                    &renderer.device,
-                    &renderer.queue,
-                    view,
-                    [renderer.size.width as f32, renderer.size.height as f32],
-                ),
-            ];
-
-            if let Some(output) = ui_output {
-                commands.push(output);
+            let mut map_commands = map.draw(renderer, view, debug);
+            let mut commands = vec![renderer.clear(
+                view,
+                wgpu::Color {
+                    r: 0.4,
+                    g: 0.4,
+                    b: 0.4,
+                    a: 1.0,
+                },
+            )];
+            for command in map_commands.drain(..) {
+                commands.push(command);
             }
+            commands.push(sprite_renderer.draw(
+                &batches,
+                &renderer.device,
+                &renderer.queue,
+                view,
+                [renderer.size.width as f32, renderer.size.height as f32],
+            ));
+            commands.push(ui_output);
 
             input.clear();
             commands

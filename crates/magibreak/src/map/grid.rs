@@ -1,8 +1,10 @@
 use nalgebra::SMatrix;
 use perlin_noise::PerlinNoise;
+
 use serde::{Deserialize, Serialize};
 
 pub const CHUNK_SIZE: usize = 64;
+pub const MAP_FILE_PATH: &str = "assets/map.toml";
 
 #[derive(Serialize, Deserialize)]
 pub struct Grid {
@@ -29,6 +31,10 @@ impl Grid {
                 *cell = noise.floor() as u16;
             }
         }
+        println!(
+            "{}",
+            excali_io::toml::to_string(&Self { height_map }).unwrap()
+        );
 
         Self { height_map }
     }

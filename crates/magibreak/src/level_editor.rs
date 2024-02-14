@@ -1,10 +1,9 @@
 use crate::puzzle::*;
-use excali_io::tokio;
-use excali_io::tokio::fs::File;
-use excali_io::tokio::io::{AsyncReadExt, AsyncWriteExt};
 use excali_io::tokio::sync::oneshot;
+use excali_io::{load_from_toml, receive_oneshot_rx, save_to_toml, tokio, OneShotStatus};
 use excali_sprite::{Color, Sprite, SpriteBatch, SpriteTexture, Transform};
 use excali_ui::egui_winit::egui::{self, Context};
+use excali_ui::Mode;
 use log::error;
 
 #[derive(Eq, PartialEq)]
@@ -15,34 +14,39 @@ enum LevelEditorMode {
     Lines,
 }
 
-impl ToString for LevelEditorMode {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Clear => "Clear".to_string(),
-            Self::Cursor => "Cursor".to_string(),
-            Self::Place => "Place".to_string(),
-            Self::Lines => "Lines".to_string(),
+impl std::fmt::Display for LevelEditorMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Clear => "Clear".to_string(),
+                Self::Cursor => "Cursor".to_string(),
+                Self::Place => "Place".to_string(),
+                Self::Lines => "Lines".to_string(),
+            }
+        )
+    }
+}
+
+impl Mode for LevelEditorMode {
+    fn change(&self) -> Self {
+        match *self {
+            Self::Clear => Self::Cursor,
+            Self::Cursor => Self::Place,
+            Self::Place => Self::Lines,
+            Self::Lines => Self::Clear,
         }
     }
 }
 
-//TODO remove unwraps
 async fn load_puzzle(name: String) -> Result<Puzzle, String> {
-    match File::open(format!("{}{}", LEVELS_PATH, name)).await {
-        Ok(mut file) => {
-            let mut contents = String::new();
-            file.read_to_string(&mut contents).await.unwrap();
-            let result: Result<SerialablePuzzle, toml::de::Error> =
-                toml::from_str(contents.as_str());
-            match result {
-                Ok(serialable_puzzle) => match Puzzle::try_from(serialable_puzzle) {
-                    Ok(puzzle) => Ok(puzzle),
-                    Err(err) => Err(format!("{err:?}")),
-                },
-                Err(err) => Err(err.message().to_string()),
-            }
-        }
-        Err(err) => Err(format!("{err}")),
+    match load_from_toml::<SerialablePuzzle>(format!("{}{}", LEVELS_PATH, name)).await {
+        Ok(serialable_puzzle) => match Puzzle::try_from(serialable_puzzle) {
+            Ok(puzzle) => Ok(puzzle),
+            Err(err) => Err(format!("{err:?}")),
+        },
+        Err(err) => Err(err),
     }
 }
 
@@ -138,75 +142,48 @@ impl LevelEditor {
 
             ui.horizontal(|ui| {
                 // saving
-                if let Some(save_rx) = self.save_rx.as_mut() {
-                    match save_rx.try_recv() {
-                        Ok(..) => {
-                            self.save_rx = None;
-                            // refresh levels list
-                            self.load_levels();
+                match receive_oneshot_rx(&mut self.save_rx) {
+                    OneShotStatus::Value(..) => self.load_levels(),
+                    OneShotStatus::None => {
+                        if ui.button("Save").clicked() {
+                            self.save_level();
                         }
-                        Err(err) => match err {
-                            oneshot::error::TryRecvError::Empty => {
-                                ui.label("Saving");
-                            }
-                            oneshot::error::TryRecvError::Closed => {
-                                self.save_rx = None;
-                                error!("Save channel unexpectantly closed");
-                            }
-                        },
-                    };
-                } else if ui.button("Save").clicked() {
-                    self.save_level();
+                    }
+                    OneShotStatus::Empty => {
+                        ui.label("Saving");
+                    }
+                    OneShotStatus::Closed => error!("Save channel unexpectantly closed"),
                 }
 
-                // loading
-                if let Some(load_rx) = self.load_rx.as_mut() {
-                    match load_rx.try_recv() {
-                        Ok(new_puzzle) => {
-                            match new_puzzle {
-                                Ok(new_puzzle) => {
-                                    self.loaded_puzzle = new_puzzle.clone();
-                                    puzzle.load_puzzle(new_puzzle);
-                                }
-                                Err(err) => error!("{err}"),
-                            };
-                            self.load_rx = None;
-                        }
-                        Err(err) => match err {
-                            oneshot::error::TryRecvError::Closed => {
-                                self.load_rx = None;
-                                error!("Puzzle load channel closed unexpectantly")
+                match receive_oneshot_rx(&mut self.load_rx) {
+                    OneShotStatus::Closed => error!("Puzzle load channel closed unexpectantly"),
+                    OneShotStatus::Value(new_puzzle) => {
+                        match new_puzzle {
+                            Ok(new_puzzle) => {
+                                self.loaded_puzzle = new_puzzle.clone();
+                                puzzle.load_puzzle(new_puzzle);
                             }
-                            oneshot::error::TryRecvError::Empty => {}
-                        },
+                            Err(err) => error!("{err}"),
+                        };
                     }
-                } else if ui.button("Load").clicked() {
-                    self.load_level();
+                    OneShotStatus::None => {
+                        if ui.button("Load").clicked() {
+                            self.load_level();
+                        }
+                    }
+                    OneShotStatus::Empty => {
+                        ui.label("Loading level");
+                    }
                 }
             });
 
             // levels
             ui.label("Levels");
-            match self.levels_rx.as_mut() {
-                Some(levels_rx) => match levels_rx.try_recv() {
-                    Ok(levels) => {
-                        match levels {
-                            Ok(levels) => {
-                                self.levels = levels;
-                            }
-                            Err(err) => error!("{err}"),
-                        };
-                        self.levels_rx = None;
-                    }
-                    Err(err) => match err {
-                        oneshot::error::TryRecvError::Closed => {
-                            self.levels_rx = None;
-                            error!("Levels channel closed unexpectantly")
-                        }
-                        oneshot::error::TryRecvError::Empty => {}
-                    },
-                },
-                None => {
+            match receive_oneshot_rx(&mut self.levels_rx) {
+                OneShotStatus::Empty => {
+                    ui.label("Loading levels");
+                }
+                OneShotStatus::None => {
                     for level in self.levels.clone().drain(..) {
                         ui.horizontal(|ui| {
                             ui.menu_button("edit", |ui| {
@@ -221,6 +198,15 @@ impl LevelEditor {
                         });
                     }
                 }
+                OneShotStatus::Value(levels) => {
+                    match levels {
+                        Ok(levels) => {
+                            self.levels = levels;
+                        }
+                        Err(err) => error!("{err}"),
+                    };
+                }
+                OneShotStatus::Closed => error!("Levels channel closed unexpectantly"),
             }
         });
 
@@ -235,27 +221,11 @@ impl LevelEditor {
                 return;
             }
 
-            ui.horizontal(|ui| {
-                ui.label("Mode");
-                if ui.button(self.mode.to_string()).clicked() {
-                    self.change_mode();
-                }
-            });
+            self.mode.ui(ui, "Mode");
 
             if self.mode == LevelEditorMode::Place {
-                ui.horizontal(|ui| {
-                    ui.label("Sigil");
-                    if ui.button(self.rune.rune.to_string()).clicked() {
-                        self.change_sigil();
-                    }
-                });
-
-                ui.horizontal(|ui| {
-                    ui.label("Orb");
-                    if ui.button(self.rune.orb.to_string()).clicked() {
-                        self.change_orb();
-                    }
-                });
+                self.rune.rune.ui(ui, "Sigil");
+                self.rune.orb.ui(ui, "Orb");
             }
         });
     }
@@ -276,24 +246,11 @@ impl LevelEditor {
     }
 
     fn save_level(&mut self) {
-        let string: String =
-            toml::to_string(&SerialablePuzzle::from(self.loaded_puzzle.clone())).unwrap();
         let file_name = self.file_name.clone();
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.save_rx = Some(rx);
-
-        tokio::spawn(async move {
-            tx.send(
-                match File::create(format!("{}{}", LEVELS_PATH, file_name)).await {
-                    Ok(mut file) => match file.write_all(string.as_bytes()).await {
-                        Ok(()) => Ok(()),
-                        Err(err) => Err(format!("{err}")),
-                    },
-                    Err(err) => Err(format!("{err}")),
-                },
-            )
-            .unwrap();
-        });
+        self.save_rx = Some(save_to_toml(
+            &SerialablePuzzle::from(self.loaded_puzzle.clone()),
+            format!("{}{}", LEVELS_PATH, file_name),
+        ));
     }
 
     fn load_level(&mut self) {
@@ -349,32 +306,6 @@ impl LevelEditor {
     fn toggle(&mut self, puzzle: &mut ActivePuzzle) {
         self.enabled = !self.enabled;
         puzzle.load_puzzle(self.loaded_puzzle.clone());
-    }
-
-    fn change_mode(&mut self) {
-        self.mode = match self.mode {
-            LevelEditorMode::Clear => LevelEditorMode::Cursor,
-            LevelEditorMode::Cursor => LevelEditorMode::Place,
-            LevelEditorMode::Place => LevelEditorMode::Lines,
-            LevelEditorMode::Lines => LevelEditorMode::Clear,
-        };
-    }
-
-    fn change_orb(&mut self) {
-        self.rune.orb = match self.rune.orb {
-            Orb::Circle => Orb::Diamond,
-            Orb::Diamond => Orb::Octogon,
-            Orb::Octogon => Orb::Circle,
-        };
-    }
-
-    fn change_sigil(&mut self) {
-        self.rune.rune = match self.rune.rune {
-            Rune::Alpha => Rune::Sigma,
-            Rune::Sigma => Rune::Phi,
-            Rune::Phi => Rune::Delta,
-            Rune::Delta => Rune::Alpha,
-        };
     }
 
     pub fn sprite_batches<'a>(

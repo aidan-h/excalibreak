@@ -1,3 +1,4 @@
+use excali_ui::Mode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32::consts::PI;
@@ -24,6 +25,16 @@ pub enum Orb {
     Circle,
     Diamond,
     Octogon,
+}
+
+impl Mode for Orb {
+    fn change(&self) -> Self {
+        match *self {
+            Self::Circle => Self::Diamond,
+            Self::Diamond => Self::Octogon,
+            Self::Octogon => Self::Circle,
+        }
+    }
 }
 
 impl ToString for Orb {
@@ -85,6 +96,17 @@ impl ToString for Rune {
             Self::Sigma => "Sigma".to_string(),
             Self::Delta => "Delta".to_string(),
             Self::Phi => "Phi".to_string(),
+        }
+    }
+}
+
+impl Mode for Rune {
+    fn change(&self) -> Self {
+        match *self {
+            Self::Alpha => Self::Delta,
+            Self::Delta => Self::Phi,
+            Self::Phi => Self::Sigma,
+            Self::Sigma => Self::Alpha,
         }
     }
 }
