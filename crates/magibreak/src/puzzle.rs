@@ -1,8 +1,8 @@
+use excali_io::{FromKeyError, SerializeKey};
 use excali_ui::Mode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32::consts::PI;
-use std::num::ParseIntError;
 
 use excali_sprite::*;
 use gcd::Gcd;
@@ -416,6 +416,7 @@ impl Line {
 }
 
 /// The puzzle which the player interacts with
+#[derive(Debug)]
 pub struct ActivePuzzle {
     puzzle: Puzzle,
     history: Vec<Puzzle>,
@@ -592,57 +593,20 @@ pub struct SerialablePuzzle {
 }
 
 impl From<Puzzle> for SerialablePuzzle {
-    fn from(mut value: Puzzle) -> Self {
-        let mut sigils = HashMap::<String, Sigil>::new();
-        for (coordinate, rune) in value.sigils.drain() {
-            sigils.insert(format!("{} {}", coordinate.x, coordinate.y), rune);
-        }
-
+    fn from(value: Puzzle) -> Self {
         Self {
-            sigils,
+            sigils: SigilCoordinate::serialize_hash_map(&value.sigils),
             lines: value.lines,
             cursor: value.cursor,
         }
     }
 }
 
-#[derive(Debug)]
-pub enum ConvertSeriablePuzzleError {
-    ParseInt(ParseIntError),
-    NoString,
-    NoYCoordinate,
-}
-
-fn map_seriable_error(err: ParseIntError) -> ConvertSeriablePuzzleError {
-    ConvertSeriablePuzzleError::ParseInt(err)
-}
-
 impl TryFrom<SerialablePuzzle> for Puzzle {
-    type Error = ConvertSeriablePuzzleError;
-    fn try_from(mut value: SerialablePuzzle) -> Result<Self, Self::Error> {
-        let mut sigils = HashMap::<SigilCoordinate, Sigil>::new();
-
-        for (coordinate, sigil) in value.sigils.drain() {
-            let mut strings = coordinate.split(' ');
-            if let Some(first) = strings.next() {
-                if let Some(second) = strings.next() {
-                    sigils.insert(
-                        SigilCoordinate::new(
-                            first.parse::<i32>().map_err(map_seriable_error)?,
-                            second.parse::<i32>().map_err(map_seriable_error)?,
-                        ),
-                        sigil,
-                    );
-                } else {
-                    return Err(ConvertSeriablePuzzleError::NoYCoordinate);
-                }
-            } else {
-                return Err(ConvertSeriablePuzzleError::NoString);
-            }
-        }
-
+    type Error = FromKeyError<i32>;
+    fn try_from(value: SerialablePuzzle) -> Result<Self, Self::Error> {
         Ok(Self {
-            sigils,
+            sigils: Vector2::<i32>::deserialize_hash_map(&value.sigils)?,
             lines: value.lines,
             cursor: value.cursor,
         })

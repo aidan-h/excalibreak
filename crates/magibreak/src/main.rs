@@ -1,9 +1,9 @@
-use excali_io::load_from_toml;
+use excali_io::tokio::sync::oneshot;
 use excali_io::{load_file, tokio};
+use excali_io::{load_from_toml, receive_oneshot_rx, OneShotStatus};
+use log::error;
 use nalgebra::Vector2;
-use nalgebra::Vector3;
 use std::time::Instant;
-use winit::event::VirtualKeyCode;
 
 use crate::level_editor::*;
 use crate::puzzle::*;
@@ -13,8 +13,10 @@ use excali_sprite::*;
 use excali_ui::*;
 use winit::event_loop::EventLoop;
 
+use self::input::*;
 use self::map::Map;
 
+mod input;
 mod level_editor;
 mod map;
 mod puzzle;
@@ -29,46 +31,6 @@ fn main() {
     rt.block_on(game());
 }
 
-struct Actions {
-    undo: Action,
-    debug: Action,
-    camera_forward: Action,
-    camera_backward: Action,
-    camera_left: Action,
-    camera_right: Action,
-    camera_up: Action,
-    camera_down: Action,
-}
-
-impl Default for Actions {
-    fn default() -> Self {
-        Self {
-            undo: Action::new(VirtualKeyCode::U),
-            debug: Action::new(VirtualKeyCode::F2),
-            camera_forward: Action::new(VirtualKeyCode::W),
-            camera_backward: Action::new(VirtualKeyCode::S),
-            camera_left: Action::new(VirtualKeyCode::A),
-            camera_right: Action::new(VirtualKeyCode::D),
-            camera_up: Action::new(VirtualKeyCode::Space),
-            camera_down: Action::new(VirtualKeyCode::LShift),
-        }
-    }
-}
-
-impl InputMap for Actions {
-    fn actions(&mut self) -> Vec<&mut Action> {
-        vec![
-            &mut self.undo,
-            &mut self.camera_forward,
-            &mut self.camera_up,
-            &mut self.camera_down,
-            &mut self.camera_right,
-            &mut self.camera_left,
-            &mut self.camera_backward,
-            &mut self.debug,
-        ]
-    }
-}
 async fn load_sprite_texture(
     path: &str,
     sprite_renderer: &SpriteRenderer,
@@ -84,14 +46,15 @@ async fn load_sprite_texture(
 }
 
 /// The user facing puzzle
+#[derive(Debug)]
 struct PuzzlePlayer {
     puzzle: ActivePuzzle,
     editor: LevelEditor,
 }
 
 impl PuzzlePlayer {
-    async fn new() -> Self {
-        let editor = LevelEditor::new("draft.toml".to_string()).await;
+    async fn new(level: String) -> Self {
+        let editor = LevelEditor::new(level + ".toml").await;
         let puzzle = ActivePuzzle::new(editor.loaded_puzzle.clone());
         Self { editor, puzzle }
     }
@@ -110,11 +73,16 @@ async fn game() {
     );
 
     let mut puzzle_player: Option<PuzzlePlayer> = None;
+    let mut load_puzzle_rx: Option<oneshot::Receiver<PuzzlePlayer>> = None;
 
     let mut input = Input::new(renderer.window.id(), Actions::default());
     let mut ui = UI::new(&renderer.device, &event_loop);
     let mut map = Map::new(
-        load_from_toml(map::grid::MAP_FILE_PATH).await.unwrap(),
+        load_from_toml::<map::SerializableGrid>(map::grid::MAP_FILE_PATH)
+            .await
+            .unwrap()
+            .try_into()
+            .unwrap(),
         &renderer.config,
         &renderer.device,
     );
@@ -160,39 +128,6 @@ async fn game() {
                 debug = !debug;
             }
 
-            {
-                let mut direction = Vector3::<f32>::zeros();
-
-                if input.input_map.camera_forward.button.state.pressed() {
-                    direction += Vector3::new(0.0, 0.0, 1.0);
-                }
-
-                if input.input_map.camera_backward.button.state.pressed() {
-                    direction -= Vector3::new(0.0, 0.0, 1.0);
-                }
-
-                if input.input_map.camera_left.button.state.pressed() {
-                    direction += Vector3::new(1.0, 0.0, 0.0);
-                }
-
-                if input.input_map.camera_right.button.state.pressed() {
-                    direction -= Vector3::new(1.0, 0.0, 0.0);
-                }
-
-                if input.input_map.camera_up.button.state.pressed() {
-                    direction += Vector3::new(0.0, 1.0, 0.0);
-                }
-
-                if input.input_map.camera_down.button.state.pressed() {
-                    direction -= Vector3::new(0.0, 1.0, 0.0);
-                }
-                const CAMERA_SPEED: f32 = 5.0;
-
-                if direction.magnitude_squared() >= 1.0 {
-                    map.camera.input_fly(direction, delta as f32 * CAMERA_SPEED);
-                }
-            }
-
             let time = renderer
                 .last_frame
                 .duration_since(start_instant)
@@ -204,8 +139,9 @@ async fn game() {
                 |ctx| {
                     if let Some(player) = puzzle_player.as_mut() {
                         player.editor.ui(ctx, &mut player.puzzle);
+                    } else {
+                        map.ui(ctx);
                     }
-                    map.ui(ctx);
                 },
                 &renderer.device,
                 &renderer.queue,
@@ -213,8 +149,38 @@ async fn game() {
                 &renderer.window,
                 [renderer.size.width, renderer.size.height],
             );
-            map.input(&input, renderer);
 
+            // TODO temporary
+            if input.input_map.escape.button.state == InputState::JustPressed {
+                puzzle_player = None;
+            }
+
+            // TODO borrow checker is stupid here, why can't I have a mut ref of a variable used in
+            // if condition?!
+            if puzzle_player.is_none() {
+                match receive_oneshot_rx(&mut load_puzzle_rx) {
+                    OneShotStatus::Closed => error!("Load level channel closed"),
+                    OneShotStatus::Value(player) => puzzle_player = Some(player),
+                    OneShotStatus::None => {
+                        if let Some(zone_coordinate) = map.input(&input, renderer, delta) {
+                            // TODO this is shit
+                            let zone_name = map
+                                .grid
+                                .zones
+                                .get(&zone_coordinate)
+                                .unwrap()
+                                .level_name
+                                .clone();
+                            let (tx, rx) = oneshot::channel();
+                            tokio::spawn(async move {
+                                tx.send(PuzzlePlayer::new(zone_name).await).unwrap();
+                            });
+                            load_puzzle_rx = Some(rx);
+                        }
+                    }
+                    OneShotStatus::Empty => (),
+                }
+            }
             if let Some(player) = puzzle_player.as_mut() {
                 if input.input_map.undo.button.state == InputState::JustPressed {
                     player.puzzle.undo();
@@ -258,6 +224,7 @@ async fn game() {
                     }
                 }
             }
+            // process map input if there isn't a level loaded
 
             let mut map_commands = map.draw(renderer, view, debug);
             let mut commands = vec![renderer.clear(

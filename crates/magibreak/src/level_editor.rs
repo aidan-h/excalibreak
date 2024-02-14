@@ -6,7 +6,7 @@ use excali_ui::egui_winit::egui::{self, Context};
 use excali_ui::Mode;
 use log::error;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, Debug, PartialEq)]
 enum LevelEditorMode {
     Clear,
     Cursor,
@@ -50,6 +50,7 @@ async fn load_puzzle(name: String) -> Result<Puzzle, String> {
     }
 }
 
+#[derive(Debug)]
 pub struct LevelEditor {
     pub enabled: bool,
     // puzzle's original state

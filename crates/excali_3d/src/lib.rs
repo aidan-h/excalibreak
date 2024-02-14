@@ -1,7 +1,7 @@
 use excali_render::wgpu::util::DeviceExt;
 use excali_render::wgpu::*;
 use excali_render::{wgpu, Renderer};
-use nalgebra::{Matrix4, Point3, Vector3};
+use nalgebra::{Matrix4, Point3, UnitQuaternion, Vector3};
 
 pub struct Model {
     pub vertex_buffer: wgpu::Buffer,
@@ -30,12 +30,36 @@ impl Model {
             indices,
         }
     }
+
+    /// creates a 3D cube model with a center origin
+    pub fn cube(device: &Device, name: String, mut size: Vector3<f32>, color: [f32; 3]) -> Self {
+        size /= 2.0;
+
+        let vertices = vec![
+            Vertex::new([-size.x, -size.y, -size.z], color),
+            Vertex::new([size.x, -size.y, -size.z], color),
+            Vertex::new([-size.x, size.y, -size.z], color),
+            Vertex::new([-size.x, -size.y, size.z], color),
+            Vertex::new([size.x, size.y, -size.z], color),
+            Vertex::new([-size.x, size.y, size.z], color),
+            Vertex::new([size.x, -size.y, size.z], color),
+            Vertex::new([size.x, size.y, size.z], color),
+        ];
+
+        let indices = vec![
+            0, 2, 1, 1, 2, 4, // Back
+            3, 6, 5, 6, 7, 5, // Front
+            0, 1, 3, 1, 6, 3, // Bottom
+            0, 3, 5, 0, 5, 2, // Left
+            1, 4, 7, 1, 7, 6, // Right
+            5, 7, 4, 5, 4, 2, // Top
+        ];
+        Self::new(device, vertices, indices, name)
+    }
 }
 
 struct DepthTexture {
-    texture: wgpu::Texture,
     view: wgpu::TextureView,
-    sampler: wgpu::Sampler,
     size: [u32; 2],
 }
 
@@ -61,24 +85,8 @@ impl DepthTexture {
         let texture = device.create_texture(&desc);
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            // 4.
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual),
-            lod_min_clamp: 0.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
-
         Self {
-            texture,
             view,
-            sampler,
             size: [config.width, config.height],
         }
     }
@@ -88,8 +96,38 @@ pub struct Renderer3D {
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
+    instance_buffer: wgpu::Buffer,
+    instances: usize,
     debug_render_pipeline: wgpu::RenderPipeline,
     depth_texture: DepthTexture,
+}
+
+pub struct ModelBatch<'a> {
+    pub model: &'a Model,
+    pub matrices: Vec<Matrix4<f32>>,
+}
+
+pub struct Transform {
+    pub position: Vector3<f32>,
+    pub scale: Vector3<f32>,
+    pub rotation: UnitQuaternion<f32>,
+}
+
+impl Transform {
+    pub fn matrix(&self) -> Matrix4<f32> {
+        Matrix4::new_translation(&self.position)
+            * (Matrix4::new_nonuniform_scaling(&self.scale) * self.rotation.to_homogeneous())
+    }
+}
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self {
+            position: Vector3::zeros(),
+            rotation: UnitQuaternion::identity(),
+            scale: Vector3::new(1.0, 1.0, 1.0),
+        }
+    }
 }
 
 impl Renderer3D {
@@ -97,7 +135,7 @@ impl Renderer3D {
         &mut self,
         renderer: &Renderer,
         view: &TextureView,
-        models: &[&Model],
+        batches: &[ModelBatch],
         camera: &Camera,
         debug: bool,
     ) -> CommandBuffer {
@@ -115,6 +153,22 @@ impl Renderer3D {
         if [renderer.config.width, renderer.config.height] != self.depth_texture.size {
             self.depth_texture =
                 DepthTexture::new(&renderer.device, &renderer.config, "3D Depth Texture");
+        }
+
+        let mut instances = Vec::<InstanceRaw>::new();
+        for batch in batches {
+            for matrix in batch.matrices.iter() {
+                instances.push((*matrix).into());
+            }
+        }
+
+        if instances.len() > self.instances {
+            self.instances = instances.len();
+            self.instance_buffer = create_instance_buffer(&renderer.device, instances);
+        } else {
+            renderer
+                .queue
+                .write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instances));
         }
 
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -146,16 +200,39 @@ impl Renderer3D {
             true => &self.debug_render_pipeline,
         });
         render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-        for model in models {
-            render_pass.set_vertex_buffer(0, model.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(model.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..model.indices, 0, 0..1);
+        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+
+        let mut instance_index = 0u32;
+        for batch in batches {
+            let end_instances = batch.matrices.len() as u32 + instance_index;
+            if end_instances == instance_index {
+                continue;
+            }
+
+            render_pass.set_vertex_buffer(0, batch.model.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(
+                batch.model.index_buffer.slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
+            render_pass.draw_indexed(0..batch.model.indices, 0, instance_index..end_instances);
+            instance_index = end_instances;
         }
+
         drop(render_pass);
         encoder.finish()
     }
 
-    pub fn new(config: &SurfaceConfiguration, device: &Device) -> Self {
+    /// instances must be greater than 0
+    pub fn new(config: &SurfaceConfiguration, device: &Device, instances: usize) -> Self {
+        let mut instance_data = Vec::<InstanceRaw>::new();
+        for _ in 0..instances {
+            instance_data.push(InstanceRaw {
+                model: [[0.0; 4]; 4],
+            });
+        }
+
+        let instance_buffer = create_instance_buffer(device, instance_data);
+
         let camera = Camera {
             eye: Point3::new(2.0, 3.0, -1.0),
             target: Point3::new(2.0, 1.0, 0.0),
@@ -171,7 +248,7 @@ impl Renderer3D {
         };
 
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Map Camera Buffer"),
+            label: Some("3D Camera Buffer"),
             contents: bytemuck::cast_slice(&[camera_uniform]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
@@ -211,7 +288,7 @@ impl Renderer3D {
         let vertex = VertexState {
             module: &shader,
             entry_point: "vs_main",
-            buffers: &[Vertex::descriptor()],
+            buffers: &[Vertex::descriptor(), InstanceRaw::desc()],
         };
         let layout = Some(&pipeline_layout);
         let targets = [Some(ColorTargetState {
@@ -286,6 +363,8 @@ impl Renderer3D {
         Self {
             render_pipeline,
             debug_render_pipeline,
+            instances,
+            instance_buffer,
             camera_buffer,
             camera_bind_group,
             depth_texture,
@@ -372,4 +451,66 @@ impl Vertex {
             ],
         }
     }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct InstanceRaw {
+    model: [[f32; 4]; 4],
+}
+
+impl From<Matrix4<f32>> for InstanceRaw {
+    fn from(value: Matrix4<f32>) -> Self {
+        Self {
+            model: value.data.0,
+        }
+    }
+}
+
+impl InstanceRaw {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            // We need to switch from using a step mode of Vertex to Instance
+            // This means that our shaders will only change to use the next
+            // instance when the shader starts processing a new instance
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials we'll
+                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict with them later
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
+                // for each vec4. We'll have to reassemble the mat4 in
+                // the shader.
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        }
+    }
+}
+
+fn create_instance_buffer(device: &Device, instances: Vec<InstanceRaw>) -> wgpu::Buffer {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("3D Instance Buffer"),
+        contents: bytemuck::cast_slice(&instances),
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+    })
 }

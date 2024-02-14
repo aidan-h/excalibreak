@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 
 pub use serde;
 use serde::de::DeserializeOwned;
@@ -18,6 +20,7 @@ pub enum OneShotStatus<T> {
     None,
 }
 
+/// simplifies oneshot channel handling while updating an optional receiver
 pub fn receive_oneshot_rx<T>(
     rx: &mut Option<tokio::sync::oneshot::Receiver<T>>,
 ) -> OneShotStatus<T> {
@@ -84,4 +87,74 @@ pub fn save_to_toml<T: Serialize>(
         .unwrap();
     });
     rx
+}
+
+pub trait SerializeKey: Eq + std::hash::Hash + Sized {
+    type Err;
+    fn as_key(&self) -> String;
+    fn from_key(key: &str) -> Result<Self, Self::Err>;
+
+    fn serialize_hash_map<V: Clone>(hash_map: &HashMap<Self, V>) -> HashMap<String, V> {
+        let mut new_map = HashMap::<String, V>::new();
+        for (key, value) in hash_map.iter() {
+            new_map.insert(key.as_key(), value.clone());
+        }
+        new_map
+    }
+
+    fn deserialize_hash_map<V: Clone>(
+        hash_map: &HashMap<String, V>,
+    ) -> Result<HashMap<Self, V>, Self::Err> {
+        let mut new_map = HashMap::<Self, V>::new();
+        for (key, value) in hash_map.iter() {
+            new_map.insert(Self::from_key(key)?, value.clone());
+        }
+        Ok(new_map)
+    }
+}
+
+#[derive(Debug)]
+pub enum FromKeyError<T: FromStr>
+where
+    <T as FromStr>::Err: std::fmt::Debug,
+{
+    FromStr(<T as FromStr>::Err),
+    SliceDoesntFit,
+}
+//TODO extend impl to SMatrix
+#[cfg(feature = "nalgebra")]
+impl<T: Eq + FromStr + ToString + core::fmt::Debug + std::hash::Hash + nalgebra::Scalar>
+    SerializeKey for nalgebra::Vector2<T>
+where
+    <T as FromStr>::Err: std::fmt::Debug,
+{
+    type Err = FromKeyError<T>;
+    fn as_key(&self) -> String {
+        let mut out = String::new();
+        let mut values = self.iter().peekable();
+        while let Some(value) = values.next() {
+            if values.peek().is_some() {
+                out += &(value.to_string() + " ");
+            } else {
+                out += &value.to_string();
+            }
+        }
+        out
+    }
+
+    fn from_key(key: &str) -> Result<Self, FromKeyError<T>> {
+        let mut values = Vec::<T>::new();
+        for string in key.split(' ') {
+            match T::from_str(string) {
+                Ok(value) => {
+                    values.push(value);
+                }
+                Err(err) => return Err(FromKeyError::FromStr(err)),
+            }
+        }
+        match <[T; 2]>::try_from(values) {
+            Ok(value) => Ok(value.into()),
+            Err(_) => Err(FromKeyError::SliceDoesntFit),
+        }
+    }
 }

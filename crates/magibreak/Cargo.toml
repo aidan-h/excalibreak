@@ -9,10 +9,9 @@ gcd = "2.3.0"
 log = "0.4.17"
 wgpu = "0.15.1"
 winit = "0.28.1"
-excali_io = { version = "0.1.0", path = "../excali_io" }
-bytemuck = { verstion = "1.13.0", features = ["derive"] }
+excali_io = { version = "0.1.0", path = "../excali_io", features = ["nalgebra"] }
+bytemuck = { version = "1.13.1", features = ["derive"] }
 excali_3d = { version = "0.1.0", path = "../excali_3d" }
-perlin_noise = "1.0.1"
 parry3d = "0.13.3"
 
 [dependencies.excali_input]

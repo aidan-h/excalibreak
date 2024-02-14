@@ -5,8 +5,15 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.26.0", default-features = false, features = ["fs", "io-util" ,"rt-multi-thread", "sync"] }
+
 toml = "0.7.2"
 
 [dependencies.serde]
 version = "1.0.152"
 features = ["derive"]
+
+[dependencies.nalgebra]
+version = "0.32.1"
+features = ["serde-serialize", "std"]
+default-features = false
+optional = true
