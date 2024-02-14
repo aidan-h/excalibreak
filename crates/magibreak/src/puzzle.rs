@@ -8,7 +8,8 @@ use excali_sprite::*;
 use gcd::Gcd;
 use nalgebra::Vector2;
 
-const SIGIL_DISTANCE: f32 = 25.0;
+const SIGIL_DISTANCE: f32 = 23.0;
+const LINE_WIDTH: f32 = 19.0;
 
 pub trait FromSigilCoordinate {
     fn from_sigil_coordinate(coordinate: SigilCoordinate, camera: &Transform) -> Self;
@@ -308,7 +309,7 @@ impl Line {
                 height: 1.0,
                 x: -time,
                 y: 0.0,
-                width: magnitude / SIGIL_DISTANCE,
+                width: magnitude / LINE_WIDTH,
             },
             ..Default::default()
         }
