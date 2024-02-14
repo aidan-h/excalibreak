@@ -15,7 +15,7 @@ fn main() {
     rt.block_on(game());
 }
 
-const PUZZLE_SIZE: usize = 10;
+const PUZZLE_SIZE: usize = 7;
 const SIGIL_SIZE: f32 = 50.0;
 const CURSOR_SIZE: f32 = 70.0;
 
