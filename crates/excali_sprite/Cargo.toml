@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 wgpu = "0.15.1"
 bytemuck = { verstion = "1.13.0", features = ["derive"] }
+nalgebra = "0.32.1"

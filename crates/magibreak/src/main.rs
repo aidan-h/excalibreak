@@ -18,6 +18,7 @@ fn main() {
 
 const PUZZLE_SIZE: usize = 7;
 const SIGIL_SIZE: f32 = 50.0;
+const SIGIL_SCALE: Vector2<f32> = Vector2::new(SIGIL_SIZE, SIGIL_SIZE);
 const CURSOR_SIZE: f32 = 70.0;
 
 const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
@@ -31,8 +32,11 @@ struct Sigil {
 impl Sigil {
     fn sprite(&self, coordinate: SigilCoordinate) -> Sprite {
         Sprite {
-            position: coordinate.position().data.0[0],
-            size: [SIGIL_SIZE, SIGIL_SIZE],
+            transform: Transform {
+                position: coordinate.position(),
+                rotation: 0.0,
+                scale: SIGIL_SCALE,
+            },
             texture_coordinate: self.texture_coordinate(),
         }
     }
@@ -100,7 +104,7 @@ impl Puzzle {
         &'a self,
         cursor_texture: &'a wgpu::BindGroup,
         sigils_texture: &'a wgpu::BindGroup,
-    ) -> [SpriteBatch; 2] {
+    ) -> Vec<SpriteBatch> {
         let mut sprites = Vec::<Sprite>::new();
         for (y, row) in self.sigils.iter().enumerate() {
             for (x, slot) in row.iter().enumerate() {
@@ -111,14 +115,17 @@ impl Puzzle {
         }
         let cursor = SpriteBatch {
             sprites: vec![Sprite {
-                position: self.cursor.position().data.0[0],
-                size: [CURSOR_SIZE, CURSOR_SIZE],
+                transform: Transform {
+                    scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
+                    position: self.cursor.position(),
+                    rotation: 0.0,
+                },
                 texture_coordinate: Default::default(),
             }],
             texture_bind_group: cursor_texture,
         };
 
-        [
+        vec![
             cursor,
             SpriteBatch {
                 sprites,
@@ -149,7 +156,7 @@ async fn game() {
     );
     let mut puzzle = Puzzle::default();
     let mut input = Input::new(renderer.window.id());
-    puzzle.sigils[0][0] = Some(Sigil { active: true });
+    puzzle.sigils[PUZZLE_SIZE - 1][PUZZLE_SIZE - 1] = Some(Sigil { active: true });
 
     let sampler = renderer.pixel_art_sampler();
     let sigils_texture = sprite_renderer.create_texture_bind_group(
@@ -182,8 +189,7 @@ async fn game() {
                 }
             }
 
-            let batches =
-                Vec::<SpriteBatch>::from(puzzle.sprite_batches(&cursor_texture, &sigils_texture));
+            let batches = puzzle.sprite_batches(&cursor_texture, &sigils_texture);
 
             let commands = vec![
                 renderer.clear(

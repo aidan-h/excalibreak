@@ -1,3 +1,4 @@
+use nalgebra::{Matrix3, Vector2, Vector3};
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
@@ -65,6 +66,7 @@ pub struct SpriteRenderer {
     length: u16,
 }
 
+#[derive(Debug)]
 pub struct TextureCoordinate {
     pub width: f32,
     pub height: f32,
@@ -79,11 +81,10 @@ impl Default for TextureCoordinate {
             height: 1.0,
             x: 0.0,
             y: 0.0,
-            }
+        }
     }
-
 }
-    impl TextureCoordinate {
+impl TextureCoordinate {
     fn bottom_left(&self) -> VertexTextureCoordinate {
         [self.x, self.y]
     }
@@ -99,41 +100,65 @@ impl Default for TextureCoordinate {
     fn top_right(&self) -> VertexTextureCoordinate {
         [self.x + self.width, self.y + self.height]
     }
+}
 
+pub struct Transform {
+    pub position: Vector2<f32>,
+    pub rotation: f32,
+    pub scale: Vector2<f32>,
+}
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self {
+            position: Vector2::zeros(),
+            rotation: 0.0,
+            scale: Vector2::zeros(),
+        }
+    }
+}
+
+impl Transform {
+    pub fn matrix(&self) -> Matrix3<f32> {
+        (Matrix3::<f32>::new_nonuniform_scaling(&self.scale) * Matrix3::new_rotation(self.rotation))
+            .append_translation(&self.position)
+    }
 }
 
 pub struct Sprite {
-    pub position: [f32; 2],
-    pub size: [f32; 2],
+    pub transform: Transform,
     pub texture_coordinate: TextureCoordinate,
 }
 
 impl Sprite {
     fn vertices(&self) -> [Vertex; 4] {
-        let half_width = self.size[0] / 2.0;
-        let half_height = self.size[1] / 2.0;
+        //TODO optimize
+        const BOTTOM_LEFT: Vector3<f32> = Vector3::new(-0.5, -0.5, 1.0);
+        const BOTTOM_RIGHT: Vector3<f32> = Vector3::new(0.5, -0.5, 1.0);
+        const TOP_LEFT: Vector3<f32> = Vector3::new(-0.5, 0.5, 1.0);
+        const TOP_RIGHT: Vector3<f32> = Vector3::new(0.5, 0.5, 1.0);
 
-        let left = self.position[0] - half_width;
-        let right = self.position[0] + half_width;
-
-        let bottom = self.position[1] - half_height;
-        let top = self.position[1] + half_height;
+        let matrix = self.transform.matrix();
+        let bottom_left = matrix * BOTTOM_LEFT;
+        let bottom_right = matrix * BOTTOM_RIGHT;
+        let top_left = matrix * TOP_LEFT;
+        let top_right = matrix * TOP_RIGHT;
 
         [
             Vertex {
-                position: [left, bottom],
+                position: [bottom_left.x, bottom_left.y],
                 tex_coords: self.texture_coordinate.bottom_left(),
             },
             Vertex {
-                position: [right, bottom],
+                position: [bottom_right.x, bottom_right.y],
                 tex_coords: self.texture_coordinate.bottom_right(),
             },
             Vertex {
-                position: [right, top],
+                position: [top_right.x, top_right.y],
                 tex_coords: self.texture_coordinate.top_right(),
             },
             Vertex {
-                position: [left, top],
+                position: [top_left.x, top_left.y],
                 tex_coords: self.texture_coordinate.top_left(),
             },
         ]
@@ -374,16 +399,17 @@ impl SpriteRenderer {
         // can only write to buffer once a frame
         queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
 
-        let mut offset = 0;
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+
+        let mut indices_offset = 0;
         for batch in sprite_batches.iter() {
-            let sprite_indicies = batch.sprites.len() as u32 * 6;
+            let sprite_indices = batch.sprites.len() as u32 * 6;
 
             render_pass.set_bind_group(0, batch.texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(offset..offset + sprite_indicies, 0, 0..1);
+            render_pass.draw_indexed(indices_offset..indices_offset + sprite_indices, 0, 0..1);
 
-            offset += sprite_indicies;
+            indices_offset += sprite_indices;
         }
 
         drop(render_pass);
