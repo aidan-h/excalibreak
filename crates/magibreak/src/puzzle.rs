@@ -57,13 +57,13 @@ impl Orb {
     pub fn texture_coordinate(&self, active: bool) -> TextureCoordinate {
         let x = if active { 0.5 } else { 0.0 };
         let y = match self {
-            Self::Octogon => 2.0 / 3.0,
-            Self::Diamond => 1.0 / 3.0,
+            Self::Octogon => 0.5,
+            Self::Diamond => 0.25,
             Self::Circle => 0.0,
         };
         TextureCoordinate {
             width: 0.5,
-            height: 1.0 / 3.0,
+            height: 0.25,
             x,
             y,
         }
