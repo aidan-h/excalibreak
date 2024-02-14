@@ -1,3 +1,4 @@
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::num::ParseIntError;
@@ -222,7 +223,7 @@ impl Line {
     }
 
     fn intersects(&self, other: &Self) -> bool {
-        // see https://stackoverflow.com/a/565282 & ucarion/line_intersection
+        // see https://stackoverflow.com/a/565282 
         let p = Position::new(self.start.x as f32, self.start.y as f32);
         let q = Position::new(other.start.x as f32, other.start.y as f32);
         let r = Position::new(self.end.x as f32, self.end.y as f32) - p;
@@ -237,21 +238,33 @@ impl Line {
             return true;
         }
 
-        // endpoints are not considered except in parallel scenario
-        if r_cross_s != 0.0
-            && ((self.start == other.start && self.end != other.end)
-                || (self.start == other.end && self.end != other.start)
-                || (self.end == other.start && self.start != other.end)
-                || (self.end == other.end && self.start != other.start))
-        {
-            return false;
-        }
-
         // are the lines are parallel?
         if r_cross_s == 0.0 {
             // are the lines collinear?
-            q_minus_p_cross_r == 0.0
+            info!("{other:?}");
+            if q_minus_p_cross_r == 0.0 {
+                // original post doesn't workout parallel cases for this game
+                let min_x = self.start.x.min(self.end.x);
+                let max_x = self.start.x.max(self.end.x);
+                let min_y = self.start.y.min(self.end.y);
+                let max_y = self.start.y.max(self.end.y);
+                !((other.start.x >= max_x && other.end.x > max_x) || (other.end.x >= max_x && other.start.x > max_x) ||
+                (other.start.x <= min_x && other.end.x < min_x) || (other.end.x <= min_x && other.start.x < min_x) ||
+                (other.start.y >= max_y && other.end.y > max_y) || (other.end.y >= max_y && other.start.y > max_y) ||
+                (other.start.y <= min_y && other.end.y < min_y) || (other.end.y <= min_y && other.start.y < min_y))
+            } else {
+                false
+            }
         } else {
+            // endpoints are not considered except in parallel scenario
+            if (self.start == other.start && self.end != other.end)
+                || (self.start == other.end && self.end != other.start)
+                || (self.end == other.start && self.start != other.end)
+                || (self.end == other.end && self.start != other.start)
+            {
+                return false;
+            }
+
             // the lines are not parallel
             let t = Self::cross(&q_minus_p, &(s / r_cross_s));
             let u = Self::cross(&q_minus_p, &(r / r_cross_s));
