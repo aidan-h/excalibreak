@@ -31,6 +31,16 @@ async fn load_texture_from_file(path: &str, renderer: &Renderer) -> io::Result<w
     Ok(renderer.load_texture(&bytes, Some(path)))
 }
 
+async fn load_level_file(name: &str) ->io::Result<String> {
+    const LEVELS_PATH: &str = "./assets/levels/";
+    let mut file = File::open(format!("{}{}.toml", LEVELS_PATH, name)).await?;
+
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).await?;
+
+    Ok(contents)
+}
+
 async fn game() {
     let mut event_loop = EventLoop::new();
     let mut renderer = Renderer::new(&mut event_loop).await;
@@ -40,21 +50,12 @@ async fn game() {
         renderer.size.width as f32,
         renderer.size.height as f32,
     );
-    let mut puzzle = Puzzle::default();
+
+    let seriable_puzzle: SerialablePuzzle = toml::from_str(load_level_file("draft").await.unwrap().as_str()).unwrap();
+    let mut puzzle = Puzzle::try_from(seriable_puzzle).unwrap();
+
     let mut input = Input::new(renderer.window.id());
     let mut ui = UI::new(&renderer.device, &event_loop);
-
-    for x in 0..3 {
-        for y in 0..3 {
-            puzzle.runes.insert(
-                Vector2::new(x, y),
-                Rune {
-                    sigil: Sigil::Alpha,
-                    orb: Orb::Circle,
-                },
-            );
-        }
-    }
 
     let sampler = renderer.pixel_art_sampler();
     let orbs_texture = sprite_renderer.create_texture_bind_group(

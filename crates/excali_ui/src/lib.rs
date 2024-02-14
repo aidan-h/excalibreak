@@ -2,7 +2,7 @@ use egui::Context;
 use egui_wgpu::renderer::Renderer;
 use egui_wgpu::wgpu::{self, CommandBuffer, Device, Queue, TextureView};
 pub use egui_winit;
-use egui_winit::winit::event::{Event, WindowEvent};
+use egui_winit::winit::event::Event;
 use egui_winit::winit::window::{Window, WindowId};
 
 pub struct UI {

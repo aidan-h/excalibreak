@@ -1,4 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::num::ParseIntError;
 
 use excali_sprite::*;
 use gcd::Gcd;
@@ -10,7 +12,7 @@ const CURSOR_SIZE: f32 = 70.0;
 
 const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
 
-#[derive(Copy, Clone)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum Orb {
     Circle,
     Diamond,
@@ -38,7 +40,7 @@ impl Orb {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum Sigil {
     Alpha,
     Sigma,
@@ -106,6 +108,7 @@ impl Sigil {
     }
 }
 
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct Rune {
     pub sigil: Sigil,
     pub orb: Orb,
@@ -154,7 +157,7 @@ fn line_between(start: Vector2<f32>, end: Vector2<f32>, thickness: f32) -> Trans
     }
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 struct Line {
     start: SigilCoordinate,
     end: SigilCoordinate,
@@ -234,6 +237,7 @@ impl Line {
     }
 }
 
+#[derive(Clone)]
 pub struct Puzzle {
     pub runes: HashMap<SigilCoordinate, Rune>,
     lines: Vec<Line>,
@@ -337,5 +341,87 @@ impl Puzzle {
                 texture_bind_group: sigils_texture,
             },
         ]
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SerialablePuzzle {
+    runes: HashMap<String, Rune>,
+    lines: Vec<Line>,
+    cursor: SigilCoordinate,
+}
+
+impl From<Puzzle> for SerialablePuzzle {
+    fn from(mut value: Puzzle) -> Self {
+        let mut runes = HashMap::<String, Rune>::new();
+        for (coordinate, rune) in value.runes.drain() {
+            runes.insert(format!("{} {}", coordinate.x, coordinate.y), rune);
+        }
+
+        Self {
+            runes,
+            lines: value.lines,
+            cursor: value.cursor,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ConvertSeriablePuzzleError {
+    ParseInt(ParseIntError),
+    NoString,
+    NoYCoordinate,
+}
+
+fn map_seriable_error(err: ParseIntError) -> ConvertSeriablePuzzleError {
+    ConvertSeriablePuzzleError::ParseInt(err)
+}
+
+impl TryFrom<SerialablePuzzle> for Puzzle {
+    type Error = ConvertSeriablePuzzleError;
+    fn try_from(mut value: SerialablePuzzle) -> Result<Self, Self::Error> {
+        let mut runes = HashMap::<SigilCoordinate, Rune>::new();
+
+        for (coordinate, rune) in value.runes.drain() {
+            let mut strings = coordinate.split(' ');
+            if let Some(first) = strings.next() {
+                if let Some(second) = strings.next() {
+                    runes.insert(
+                        SigilCoordinate::new(
+                            first.parse::<i32>().map_err(map_seriable_error)?,
+                            second.parse::<i32>().map_err(map_seriable_error)?,
+                        ),
+                        rune,
+                    );
+                } else {
+                    return Err(ConvertSeriablePuzzleError::NoYCoordinate);
+                }
+            } else {
+                return Err(ConvertSeriablePuzzleError::NoString);
+            }
+        }
+
+        Ok(Self {
+            runes,
+            lines: value.lines,
+            cursor: value.cursor,
+        })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn puzzle_can_serialize() {
+        let runes = HashMap::<SigilCoordinate, Rune>::new();
+        let puzzle = Puzzle {
+            runes,
+            lines: vec![],
+            cursor: SigilCoordinate::zeros(),
+        };
+        let serialized = SerialablePuzzle::from(puzzle);
+        Puzzle::try_from(serialized).unwrap();
     }
 }
