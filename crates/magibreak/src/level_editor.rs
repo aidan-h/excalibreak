@@ -363,7 +363,9 @@ impl LevelEditor {
     fn change_sigil(&mut self) {
         self.rune.sigil = match self.rune.sigil {
             Sigil::Alpha => Sigil::Sigma,
-            Sigil::Sigma => Sigil::Alpha,
+            Sigil::Sigma => Sigil::Phi,
+            Sigil::Phi => Sigil::Delta,
+            Sigil::Delta => Sigil::Alpha,
         };
     }
 

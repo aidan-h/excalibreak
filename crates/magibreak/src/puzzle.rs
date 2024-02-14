@@ -81,6 +81,8 @@ impl Orb {
 pub enum Sigil {
     Alpha,
     Sigma,
+    Delta,
+    Phi,
 }
 
 impl ToString for Sigil {
@@ -88,6 +90,8 @@ impl ToString for Sigil {
         match self {
             Self::Alpha => "Alpha".to_string(),
             Self::Sigma => "Sigma".to_string(),
+            Self::Delta => "Delta".to_string(),
+            Self::Phi => "Phi".to_string(),
         }
     }
 }
@@ -104,6 +108,48 @@ impl Sigil {
                         }
                     }
                 }
+                false
+            }
+            Self::Phi => {
+                // false on connected to a line
+                for line in lines.iter() {
+                    for touching_coordinate in line.coordinates().iter() {
+                        if *touching_coordinate == coordinate {
+                            return false;
+                        }
+                    }
+                }
+                true
+            }
+            Self::Delta => {
+                // true inside but not on a triangle (direction matters)
+                for line_a in lines.iter() {
+                    for line_b in lines.iter() {
+                        if line_b.start == line_a.end {
+                            for line_c in lines.iter() {
+                                if line_c.start == line_b.end && line_c.end == line_a.start {
+                                    // triangle - directional
+                                    let direction =
+                                        orientation(line_a.start, line_a.end, line_b.end);
+                                    if direction == Orientation::Collinear {
+                                        continue;
+                                    }
+
+                                    if orientation(line_a.start, line_a.end, coordinate)
+                                        == direction
+                                        && orientation(line_b.start, line_b.end, coordinate)
+                                            == direction
+                                        && orientation(line_c.start, line_c.end, coordinate)
+                                            == direction
+                                    {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 false
             }
             Self::Sigma => {
@@ -143,12 +189,14 @@ impl Sigil {
     pub fn texture_coordinate(&self) -> TextureCoordinate {
         let x = match self {
             Self::Alpha => 0.0,
-            Self::Sigma => 0.5,
+            Self::Sigma => 0.25,
+            Self::Delta => 0.5,
+            Self::Phi => 0.75,
         };
         TextureCoordinate {
-            width: 0.5,
-            height: 1.0,
-            y: 0.0,
+            width: 0.25,
+            height: -1.0,
+            y: 1.0,
             x,
         }
     }
@@ -219,28 +267,10 @@ impl Line {
 
     fn intersects(&self, other: &Self) -> bool {
         // uses https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
-        type Point = Vector2<i32>;
-        #[derive(Eq, PartialEq)]
-        enum Orientation {
-            Collinear,
-            Clockwise,
-            CounterClockwise,
-        }
-
         fn on_segment(a: Point, b: Point, c: Point) -> bool {
             b.x <= a.x.max(c.x) && b.x >= a.x.min(c.x) && b.y <= a.y.max(c.y) && b.y >= a.y.min(c.y)
         }
 
-        fn orientation(a: Point, b: Point, c: Point) -> Orientation {
-            let val = (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
-            if val == 0 {
-                Orientation::Collinear
-            } else if val > 0 {
-                Orientation::Clockwise
-            } else {
-                Orientation::CounterClockwise
-            }
-        }
         // Find the four orientations needed for general and
         // special cases
         let o1 = orientation(self.start, self.end, other.start);
@@ -510,6 +540,22 @@ impl TryFrom<SerialablePuzzle> for Puzzle {
             lines: value.lines,
             cursor: value.cursor,
         })
+    }
+}
+
+type Point = Vector2<i32>;
+#[derive(Eq, PartialEq)]
+enum Orientation {
+    Collinear,
+    Clockwise,
+    CounterClockwise,
+}
+
+fn orientation(a: Point, b: Point, c: Point) -> Orientation {
+    match (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y) {
+        val if val == 0 => Orientation::Collinear,
+        val if val > 0 => Orientation::Clockwise,
+        _ => Orientation::CounterClockwise,
     }
 }
 
