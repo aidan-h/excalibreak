@@ -1,12 +1,12 @@
 use crate::puzzle::*;
 use excali_sprite::{Color, Sprite, SpriteBatch, Transform};
 use excali_ui::egui_winit::egui::{self, Context};
+use log::error;
 use nalgebra::Vector2;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::oneshot::Receiver;
 use tokio::sync::oneshot::error::TryRecvError;
-use tokio::task::JoinHandle;
+use tokio::sync::oneshot::Receiver;
 
 #[derive(Eq, PartialEq)]
 enum LevelEditorMode {
@@ -26,15 +26,23 @@ impl ToString for LevelEditorMode {
 }
 
 //TODO remove unwraps
-async fn load_puzzle(name: String) -> Puzzle {
-    let mut file = File::open(format!("{}{}.toml", LEVELS_PATH, name))
-        .await
-        .unwrap();
-
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).await.unwrap();
-    let serialable_puzzle: SerialablePuzzle = toml::from_str(contents.as_str()).unwrap();
-    Puzzle::try_from(serialable_puzzle).unwrap()
+async fn load_puzzle(name: String) -> Result<Puzzle, String> {
+    match File::open(format!("{}{}.toml", LEVELS_PATH, name)).await {
+        Ok(mut file) => {
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).await.unwrap();
+            let result: Result<SerialablePuzzle, toml::de::Error> =
+                toml::from_str(contents.as_str());
+            match result {
+                Ok(serialable_puzzle) => match Puzzle::try_from(serialable_puzzle) {
+                    Ok(puzzle) => Ok(puzzle),
+                    Err(err) => Err(format!("{err:?}")),
+                },
+                Err(err) => Err(err.message().to_string()),
+            }
+        }
+        Err(err) => Err(format!("{err}")),
+    }
 }
 
 pub struct LevelEditor {
@@ -43,8 +51,8 @@ pub struct LevelEditor {
     pub loaded_puzzle: Puzzle,
     file_name: String,
     mode: LevelEditorMode,
-    save_future: Option<JoinHandle<()>>,
-    load_future: Option<Receiver<Puzzle>>,
+    save_rx: Option<Receiver<Result<(), String>>>,
+    load_rx: Option<Receiver<Result<Puzzle, String>>>,
     rune: Rune,
 }
 
@@ -52,11 +60,11 @@ impl LevelEditor {
     pub async fn new(file_name: String) -> Self {
         Self {
             enabled: false,
-            loaded_puzzle: load_puzzle(file_name.clone()).await,
+            loaded_puzzle: load_puzzle(file_name.clone()).await.unwrap(),
             file_name,
             mode: LevelEditorMode::Place,
-            save_future: None,
-            load_future: None,
+            save_rx: None,
+            load_rx: None,
             rune: Rune {
                 sigil: Sigil::Alpha,
                 orb: Orb::Circle,
@@ -97,41 +105,73 @@ impl LevelEditor {
             }
 
             ui.add(egui::TextEdit::singleline(&mut self.file_name));
-            if let Some(save_future) = &self.save_future {
-                if save_future.is_finished() {
-                    self.save_future = None;
-                } else {
-                    ui.label("Saving");
-                }
+
+            // saving
+            if let Some(save_rx) = self.save_rx.as_mut() {
+                match save_rx.try_recv() {
+                    Ok(..) => {
+                        self.save_rx = None;
+                    }
+                    Err(err) => match err {
+                        TryRecvError::Empty => {
+                            ui.label("Saving");
+                        }
+                        TryRecvError::Closed => {
+                            self.save_rx = None;
+                            error!("Save channel unexpectantly closed");
+                        }
+                    },
+                };
             } else if ui.button("Save").clicked() {
                 let string: String =
                     toml::to_string(&SerialablePuzzle::from(self.loaded_puzzle.clone())).unwrap();
                 let file_name = self.file_name.clone();
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                self.save_rx = Some(rx);
 
-                self.save_future = Some(tokio::spawn(async move {
-                    let mut file = File::create(format!("{}{}.toml", LEVELS_PATH, file_name))
-                        .await
-                        .unwrap();
-                    file.write_all(string.as_bytes()).await.unwrap();
-                }));
-            }
-            if let Some(load_future) = self.load_future.as_mut() {
-                match load_future.try_recv() {
-                    Ok(new_puzzle) => {
-                        self.loaded_puzzle = new_puzzle.clone();
-                        *puzzle = new_puzzle;
-                        self.load_future = None;
-                    },
-                    Err(err) => {
-                        match err {
-                            TryRecvError::Closed => self.load_future = None,
-                            TryRecvError::Empty => {},
+                tokio::spawn(async move {
+                    match File::create(format!("{}{}.toml", LEVELS_PATH, file_name)).await {
+                        Ok(mut file) => {
+                            match file.write_all(string.as_bytes()).await {
+                                Ok(()) => {
+                                    tx.send(Ok(())).unwrap();
+                                }
+                                Err(err) => {
+                                    tx.send(Err(format!("{err}"))).unwrap();
+                                }
+                            };
+                        }
+                        Err(err) => {
+                            tx.send(Err(format!("{err}"))).unwrap();
                         }
                     }
+                });
+            }
+
+            // loading
+            if let Some(load_rx) = self.load_rx.as_mut() {
+                match load_rx.try_recv() {
+                    Ok(new_puzzle) => {
+                        match new_puzzle {
+                            Ok(new_puzzle) => {
+                                self.loaded_puzzle = new_puzzle.clone();
+                                *puzzle = new_puzzle;
+                            }
+                            Err(err) => error!("{err}"),
+                        };
+                        self.load_rx = None;
+                    }
+                    Err(err) => match err {
+                        TryRecvError::Closed => {
+                            self.load_rx = None;
+                            error!("Puzzle load channel closed unexpectantly")
+                        }
+                        TryRecvError::Empty => {}
+                    },
                 }
             } else if ui.button("Load").clicked() {
                 let (tx, rx) = tokio::sync::oneshot::channel();
-                self.load_future = Some(rx);
+                self.load_rx = Some(rx);
 
                 let file_name = self.file_name.clone();
                 tokio::spawn(async move {

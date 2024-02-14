@@ -44,6 +44,8 @@ async fn load_texture(
     )
 }
 async fn game() {
+    env_logger::init();
+
     let mut event_loop = EventLoop::new();
     let mut renderer = Renderer::new(&mut event_loop).await;
     let mut sprite_renderer = SpriteRenderer::new(
