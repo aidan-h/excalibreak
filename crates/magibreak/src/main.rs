@@ -25,24 +25,33 @@ const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
 const SIGIL_OFFSET: f32 = SIGIL_DISTANCE * PUZZLE_SIZE as f32 / 2.0 - SIGIL_DISTANCE / 2.0;
 
 #[derive(Copy, Clone)]
-struct Sigil {
-    active: bool,
+enum Sigil {
+    Alpha,
 }
 
 impl Sigil {
-    fn sprite(&self, coordinate: SigilCoordinate) -> Sprite {
+    fn sprite(&self, coordinate: SigilCoordinate, lines: &[Line]) -> Sprite {
         Sprite {
             transform: Transform {
                 position: coordinate.position(),
                 rotation: 0.0,
                 scale: SIGIL_SCALE,
             },
-            texture_coordinate: self.texture_coordinate(),
+            texture_coordinate: self.texture_coordinate(coordinate, lines),
         }
     }
 
-    fn texture_coordinate(&self) -> TextureCoordinate {
-        if self.active {
+    fn active(&self, coordinate: SigilCoordinate, lines: &[Line]) -> bool {
+        for line in lines.iter() {
+            if line.start == coordinate || line.end == coordinate {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn texture_coordinate(&self, coordinate: SigilCoordinate, lines: &[Line]) -> TextureCoordinate {
+        if self.active(coordinate, lines) {
             return TextureCoordinate {
                 width: 0.5,
                 height: 1.0,
@@ -123,7 +132,7 @@ struct Puzzle {
 impl Default for Puzzle {
     fn default() -> Self {
         Self {
-            sigils: [[Some(Sigil { active: false }); PUZZLE_SIZE]; PUZZLE_SIZE],
+            sigils: [[Some(Sigil::Alpha); PUZZLE_SIZE]; PUZZLE_SIZE],
             lines: Vec::new(),
             cursor: SigilCoordinate(Vector2::zeros()),
         }
@@ -161,7 +170,7 @@ impl Puzzle {
         for (y, row) in self.sigils.iter().enumerate() {
             for (x, slot) in row.iter().enumerate() {
                 if let Some(sigil) = slot {
-                    sprites.push(sigil.sprite(SigilCoordinate(Vector2::new(x, y))));
+                    sprites.push(sigil.sprite(SigilCoordinate(Vector2::new(x, y)), &self.lines));
                 }
             }
         }
@@ -212,7 +221,7 @@ async fn game() {
     );
     let mut puzzle = Puzzle::default();
     let mut input = Input::new(renderer.window.id());
-    puzzle.sigils[PUZZLE_SIZE - 1][PUZZLE_SIZE - 1] = Some(Sigil { active: true });
+    puzzle.sigils[PUZZLE_SIZE - 1][PUZZLE_SIZE - 1] = Some(Sigil::Alpha);
 
     let sampler = renderer.pixel_art_sampler();
     let sigils_texture = sprite_renderer.create_texture_bind_group(
