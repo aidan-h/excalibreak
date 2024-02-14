@@ -8,7 +8,6 @@ use excali_sprite::*;
 use gcd::Gcd;
 use nalgebra::Vector2;
 
-use crate::map::grid::MapCoordinate;
 use crate::textures::Textures;
 
 const SIGIL_DISTANCE: f32 = 23.0;
@@ -422,15 +421,13 @@ impl Line {
 /// The puzzle which the player interacts with
 #[derive(Debug)]
 pub struct ActivePuzzle {
-    coordinate: MapCoordinate,
     puzzle: Puzzle,
     history: Vec<Puzzle>,
 }
 
 impl ActivePuzzle {
-    pub fn new(puzzle: Puzzle, coordinate: MapCoordinate) -> Self {
+    pub fn new(puzzle: Puzzle) -> Self {
         Self {
-            coordinate,
             puzzle,
             history: Vec::new(),
         }
@@ -470,10 +467,6 @@ impl ActivePuzzle {
         textures: &'a Textures,
     ) -> Vec<SpriteBatch<'a>> {
         self.puzzle.sprite_batches(time, camera, textures)
-    }
-
-    pub fn coordinate(&self) -> &MapCoordinate {
-        &self.coordinate
     }
 }
 

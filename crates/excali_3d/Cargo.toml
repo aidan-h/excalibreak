@@ -3,9 +3,8 @@ name = "excali_3d"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 excali_render = { version = "0.1.0", path = "../excali_render" }
 bytemuck = { version = "1.13", features = ["derive"] }
-nalgebra = "0.32.2"
+nalgebra = "^0.32"
+parry3d = { version = "^0.13", optional = true }

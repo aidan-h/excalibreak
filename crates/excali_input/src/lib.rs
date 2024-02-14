@@ -1,6 +1,6 @@
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceId, ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent};
-use winit::window::WindowId;
+use winit::window::{CursorGrabMode, Window, WindowId};
 
 #[derive(Copy, Clone)]
 pub struct MousePosition(pub PhysicalPosition<f64>);
@@ -51,6 +51,22 @@ impl Button {
         self.consumed = consumed;
         self.state.update(state);
     }
+
+    pub fn just_pressed(&self) -> bool {
+        !self.consumed && self.state == InputState::JustPressed
+    }
+
+    pub fn pressed(&self) -> bool {
+        !self.consumed && self.state == InputState::Pressed
+    }
+
+    pub fn just_released(&self) -> bool {
+        !self.consumed && self.state == InputState::JustReleased
+    }
+
+    pub fn released(&self) -> bool {
+        !self.consumed && self.state == InputState::Released
+    }
 }
 
 #[derive(Eq, PartialEq)]
@@ -90,10 +106,12 @@ impl InputState {
 
 pub struct Input<T: InputMap> {
     pub mouse_position: Option<MousePosition>,
+    pub mouse_delta: Option<MousePosition>,
     pub window_id: WindowId,
     pub left_mouse_click: Button,
     pub right_mouse_click: Button,
     pub middle_mouse_click: Button,
+    mouse_locked: bool,
     pub input_map: T,
     cursor_device_id: Option<DeviceId>,
 }
@@ -101,7 +119,9 @@ pub struct Input<T: InputMap> {
 impl<M: InputMap> Input<M> {
     pub fn new(window_id: WindowId, input_map: M) -> Input<M> {
         Self {
+            mouse_locked: false,
             mouse_position: None,
+            mouse_delta: None,
             left_mouse_click: Default::default(),
             right_mouse_click: Default::default(),
             middle_mouse_click: Default::default(),
@@ -111,13 +131,20 @@ impl<M: InputMap> Input<M> {
         }
     }
 
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self, window: &Window) {
         self.left_mouse_click.state.step();
         self.right_mouse_click.state.step();
         self.middle_mouse_click.state.step();
         for action in self.input_map.actions().iter_mut() {
             action.button.state.step();
         }
+        if self.mouse_locked && self.mouse_position.is_some() {
+            let size = window.inner_size();
+            let position = PhysicalPosition::new(size.width as f64 / 2.0, size.height as f64 / 2.0);
+            self.mouse_position = None;
+            window.set_cursor_position(position).unwrap();
+        }
+        self.mouse_delta = None;
     }
 
     pub fn handle_event<T>(&mut self, event: &Event<T>, consumed: bool)
@@ -148,6 +175,7 @@ impl<M: InputMap> Input<M> {
                     if Some(*device_id) == self.cursor_device_id {
                         self.cursor_device_id = None;
                         self.mouse_position = None;
+                        self.mouse_delta = None;
                     }
                 }
                 WindowEvent::CursorEntered { device_id } => {
@@ -160,6 +188,12 @@ impl<M: InputMap> Input<M> {
                 } => {
                     if let Some(cursor_device_id) = self.cursor_device_id {
                         if cursor_device_id == *device_id {
+                            if let Some(last_position) = self.mouse_position {
+                                self.mouse_delta = Some(MousePosition(PhysicalPosition::new(
+                                    position.x - last_position.0.x,
+                                    position.y - last_position.0.y,
+                                )));
+                            }
                             self.mouse_position = Some(MousePosition(*position));
                         }
                     }
@@ -180,5 +214,21 @@ impl<M: InputMap> Input<M> {
                 }
             }
         }
+    }
+
+    pub fn mouse_locked(&self) -> bool {
+        self.mouse_locked
+    }
+
+    pub fn lock_mouse(&mut self, lock: bool, window: &Window) {
+        self.mouse_locked = lock;
+        window.set_cursor_visible(!lock);
+        window
+            .set_cursor_grab(if lock {
+                CursorGrabMode::Confined
+            } else {
+                CursorGrabMode::None
+            })
+            .unwrap();
     }
 }

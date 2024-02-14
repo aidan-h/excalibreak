@@ -11,8 +11,8 @@ wgpu = "0.15.1"
 winit = "0.28.1"
 excali_io = { version = "0.1.0", path = "../excali_io", features = ["nalgebra"] }
 bytemuck = { version = "1.13.1", features = ["derive"] }
-excali_3d = { version = "0.1.0", path = "../excali_3d" }
-parry3d = "0.13.3"
+excali_3d = { version = "0.1.0", path = "../excali_3d", features = ["parry3d"] }
+rapier3d = { version = "0.17.2", features = ["debug-render"] }
 
 [dependencies.excali_input]
 version = "0.1.0"

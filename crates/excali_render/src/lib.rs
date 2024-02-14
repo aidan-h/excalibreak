@@ -18,13 +18,16 @@ pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
-    pub size: winit::dpi::PhysicalSize<u32>,
     pub window: Window,
     pub fps_target: f64,
     pub last_frame: Instant,
 }
 
 impl Renderer {
+    pub fn aspect_ratio(&self) -> f32 {
+        self.config.width as f32 / self.config.height as f32
+    }
+
     pub fn pixel_art_sampler(&mut self) -> wgpu::Sampler {
         self.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -112,7 +115,6 @@ impl Renderer {
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        self.size = new_size;
         self.config.width = new_size.width;
         self.config.height = new_size.height;
         self.surface.configure(&self.device, &self.config);
@@ -267,7 +269,6 @@ impl Renderer {
             device,
             queue,
             config,
-            size,
         }
     }
 }
