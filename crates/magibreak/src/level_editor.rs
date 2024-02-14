@@ -376,11 +376,7 @@ impl LevelEditor {
 
                 if let Some(start) = self.line_start {
                     sprites.push(Sprite {
-                        transform: Transform {
-                            position: start.position(),
-                            rotation: 0.0,
-                            scale: camera.scale,
-                        },
+                        transform: Transform::from_sigil_coordinate(start, camera),
                         color: Color::new(1.0, 1.0, 1.0, 0.8),
                         ..Default::default()
                     });
