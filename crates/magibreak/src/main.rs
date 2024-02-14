@@ -127,7 +127,7 @@ struct Line {
 impl Line {
     fn sprite(&self) -> Sprite {
         Sprite {
-            transform: line_between(self.start.position(), self.end.position(), 40.0),
+            transform: line_between(self.start.position(), self.end.position(), 10.0),
             texture_coordinate: Default::default(),
         }
     }
