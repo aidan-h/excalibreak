@@ -1,4 +1,6 @@
-use nalgebra::{Matrix3, Vector2, Vector3};
+use std::f32::consts::PI;
+
+use nalgebra::Vector2;
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
@@ -118,13 +120,6 @@ impl Default for Transform {
     }
 }
 
-impl Transform {
-    pub fn matrix(&self) -> Matrix3<f32> {
-        (Matrix3::<f32>::new_nonuniform_scaling(&self.scale) * Matrix3::new_rotation(self.rotation))
-            .append_translation(&self.position)
-    }
-}
-
 pub struct Sprite {
     pub transform: Transform,
     pub texture_coordinate: TextureCoordinate,
@@ -132,17 +127,19 @@ pub struct Sprite {
 
 impl Sprite {
     fn vertices(&self) -> [Vertex; 4] {
-        //TODO optimize
-        const BOTTOM_LEFT: Vector3<f32> = Vector3::new(-0.5, -0.5, 1.0);
-        const BOTTOM_RIGHT: Vector3<f32> = Vector3::new(0.5, -0.5, 1.0);
-        const TOP_LEFT: Vector3<f32> = Vector3::new(-0.5, 0.5, 1.0);
-        const TOP_RIGHT: Vector3<f32> = Vector3::new(0.5, 0.5, 1.0);
+        let position = self.transform.position;
+        let rotation = self.transform.rotation;
+        let scale = self.transform.scale / 2.0;
+        let sin = rotation.sin();
+        let cos = rotation.cos();
 
-        let matrix = self.transform.matrix();
-        let bottom_left = matrix * BOTTOM_LEFT;
-        let bottom_right = matrix * BOTTOM_RIGHT;
-        let top_left = matrix * TOP_LEFT;
-        let top_right = matrix * TOP_RIGHT;
+        let mut top_right =Vector2::new(scale.x * cos + scale.y * sin, scale.y * cos - scale.x * sin);
+        let bottom_left = position - top_right;
+        top_right += position;
+
+        let mut top_left =Vector2::new(-scale.x * cos + scale.y * sin, scale.y * cos + scale.x * sin);
+        let bottom_right= position - top_left;
+        top_left += position;
 
         [
             Vertex {

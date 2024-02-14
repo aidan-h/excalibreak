@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use excali_input::*;
 use excali_render::*;
 use excali_sprite::*;
@@ -77,6 +79,19 @@ impl SigilCoordinate {
     }
 }
 
+fn line_between(start: Vector2<f32>, end: Vector2<f32>, thickness: f32) -> Transform {
+    let position = (start + end) / 2.0;
+    let direction = end - start;
+    let magnitude = direction.magnitude();
+   let rotation = (direction.y / magnitude).asin();
+
+    Transform {
+        position,
+        rotation,
+        scale: Vector2::new(magnitude, thickness)
+    }
+}
+
 struct Puzzle {
     sigils: [[Option<Sigil>; PUZZLE_SIZE]; PUZZLE_SIZE],
     cursor: SigilCoordinate,
@@ -120,6 +135,12 @@ impl Puzzle {
                     position: self.cursor.position(),
                     rotation: 0.0,
                 },
+                texture_coordinate: Default::default(),
+            }, Sprite {
+                transform: line_between(SigilCoordinate(Vector2::zeros()).position(), SigilCoordinate(Vector2::new(0, 3)).position(), 40.0),
+                texture_coordinate: Default::default(),
+            }, Sprite {
+                transform: line_between(SigilCoordinate(Vector2::zeros()).position(), SigilCoordinate(Vector2::new(3, 0)).position(), 40.0),
                 texture_coordinate: Default::default(),
             }],
             texture_bind_group: cursor_texture,
