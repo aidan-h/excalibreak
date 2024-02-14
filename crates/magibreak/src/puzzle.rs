@@ -79,14 +79,14 @@ impl Orb {
 }
 
 #[derive(Serialize, Debug, Deserialize, Copy, Clone)]
-pub enum Sigil {
+pub enum Rune {
     Alpha,
     Sigma,
     Delta,
     Phi,
 }
 
-impl ToString for Sigil {
+impl ToString for Rune {
     fn to_string(&self) -> String {
         match self {
             Self::Alpha => "Alpha".to_string(),
@@ -97,8 +97,13 @@ impl ToString for Sigil {
     }
 }
 
-impl Sigil {
-    fn active(&self, coordinate: SigilCoordinate, lines: &[Line]) -> bool {
+impl Rune {
+    fn active<T>(
+        &self,
+        coordinate: SigilCoordinate,
+        lines: &[Line],
+        sigils: &HashMap<SigilCoordinate, T>,
+    ) -> bool {
         match self {
             Self::Alpha => {
                 // true on connected to a line
@@ -126,9 +131,10 @@ impl Sigil {
                 // true inside but not on a triangle (direction matters)
                 for line_a in lines.iter() {
                     for line_b in lines.iter() {
-                        if line_a.extends(line_b) {
+                        if line_a.extends(line_b, sigils) {
                             for line_c in lines.iter() {
-                                if line_b.extends(line_c) && line_c.extends(line_a) {
+                                if line_b.extends(line_c, sigils) && line_c.extends(line_a, sigils)
+                                {
                                     // triangle - directional
                                     let direction =
                                         orientation(line_a.start, line_a.end, line_b.end);
@@ -204,8 +210,8 @@ impl Sigil {
 }
 
 #[derive(Copy, Debug, Clone, Serialize, Deserialize)]
-pub struct Rune {
-    pub sigil: Sigil,
+pub struct Sigil {
+    pub rune: Rune,
     pub orb: Orb,
 }
 
@@ -241,8 +247,9 @@ pub struct Line {
 }
 
 impl Line {
-    /// returns if the other line branches or extends from this
-    fn extends(&self, other: &Self) -> bool {
+    /// returns if the other line branches or extends from this and there is a sigil at the
+    /// intersection
+    fn extends<T>(&self, other: &Self, sigils: &HashMap<SigilCoordinate, T>) -> bool {
         let self_coordinates = self.coordinates();
         let mut coordinates = self_coordinates.iter();
         coordinates.next();
@@ -251,6 +258,9 @@ impl Line {
         other_coordinates.pop();
 
         for coordinate in coordinates {
+            if sigils.get(coordinate).is_none() {
+                continue;
+            }
             for other_coordinate in other_coordinates.iter() {
                 if coordinate == other_coordinate {
                     return true;
@@ -392,7 +402,7 @@ impl Line {
 
 #[derive(Clone, Debug)]
 pub struct Puzzle {
-    pub runes: HashMap<SigilCoordinate, Rune>,
+    pub sigils: HashMap<SigilCoordinate, Sigil>,
     pub lines: Vec<Line>,
     pub cursor: SigilCoordinate,
 }
@@ -400,7 +410,7 @@ pub struct Puzzle {
 impl Default for Puzzle {
     fn default() -> Self {
         Self {
-            runes: HashMap::new(),
+            sigils: HashMap::new(),
             lines: Vec::new(),
             cursor: Vector2::zeros(),
         }
@@ -412,7 +422,7 @@ impl Puzzle {
         if *coordinate == self.cursor {
             return;
         }
-        if let Some(cursor_rune) = self.runes.get(&self.cursor) {
+        if let Some(cursor_rune) = self.sigils.get(&self.cursor) {
             let line = Line {
                 start: self.cursor,
                 end: *coordinate,
@@ -422,7 +432,7 @@ impl Puzzle {
                 return;
             }
 
-            if let Some(_rune) = self.runes.get(coordinate) {
+            if let Some(_rune) = self.sigils.get(coordinate) {
                 cursor_rune
                     .orb
                     .effect(self.cursor, *coordinate, &mut self.lines);
@@ -453,15 +463,17 @@ impl Puzzle {
         let mut orb_sprites = Vec::<Sprite>::new();
         let mut sigil_sprites = Vec::<Sprite>::new();
 
-        for (coordinate, rune) in self.runes.iter() {
+        for (coordinate, rune) in self.sigils.iter() {
             let transform = Transform {
                 position: coordinate.position(),
                 rotation: 0.0,
                 scale: SIGIL_SCALE,
             };
-            let orb_coordinate = rune
-                .orb
-                .texture_coordinate(rune.sigil.active(*coordinate, &self.lines));
+            let orb_coordinate = rune.orb.texture_coordinate(rune.rune.active(
+                *coordinate,
+                &self.lines,
+                &self.sigils,
+            ));
 
             orb_sprites.push(Sprite {
                 transform,
@@ -471,7 +483,7 @@ impl Puzzle {
 
             sigil_sprites.push(Sprite {
                 transform,
-                texture_coordinate: rune.sigil.texture_coordinate(),
+                texture_coordinate: rune.rune.texture_coordinate(),
                 ..Default::default()
             });
         }
@@ -510,20 +522,20 @@ impl Puzzle {
 
 #[derive(Serialize, Deserialize)]
 pub struct SerialablePuzzle {
-    runes: HashMap<String, Rune>,
+    sigils: HashMap<String, Sigil>,
     lines: Vec<Line>,
     cursor: SigilCoordinate,
 }
 
 impl From<Puzzle> for SerialablePuzzle {
     fn from(mut value: Puzzle) -> Self {
-        let mut runes = HashMap::<String, Rune>::new();
-        for (coordinate, rune) in value.runes.drain() {
-            runes.insert(format!("{} {}", coordinate.x, coordinate.y), rune);
+        let mut sigils = HashMap::<String, Sigil>::new();
+        for (coordinate, rune) in value.sigils.drain() {
+            sigils.insert(format!("{} {}", coordinate.x, coordinate.y), rune);
         }
 
         Self {
-            runes,
+            sigils,
             lines: value.lines,
             cursor: value.cursor,
         }
@@ -544,18 +556,18 @@ fn map_seriable_error(err: ParseIntError) -> ConvertSeriablePuzzleError {
 impl TryFrom<SerialablePuzzle> for Puzzle {
     type Error = ConvertSeriablePuzzleError;
     fn try_from(mut value: SerialablePuzzle) -> Result<Self, Self::Error> {
-        let mut runes = HashMap::<SigilCoordinate, Rune>::new();
+        let mut sigils = HashMap::<SigilCoordinate, Sigil>::new();
 
-        for (coordinate, rune) in value.runes.drain() {
+        for (coordinate, sigil) in value.sigils.drain() {
             let mut strings = coordinate.split(' ');
             if let Some(first) = strings.next() {
                 if let Some(second) = strings.next() {
-                    runes.insert(
+                    sigils.insert(
                         SigilCoordinate::new(
                             first.parse::<i32>().map_err(map_seriable_error)?,
                             second.parse::<i32>().map_err(map_seriable_error)?,
                         ),
-                        rune,
+                        sigil,
                     );
                 } else {
                     return Err(ConvertSeriablePuzzleError::NoYCoordinate);
@@ -566,7 +578,7 @@ impl TryFrom<SerialablePuzzle> for Puzzle {
         }
 
         Ok(Self {
-            runes,
+            sigils,
             lines: value.lines,
             cursor: value.cursor,
         })
@@ -595,9 +607,9 @@ mod test {
 
     #[test]
     fn puzzle_can_serialize() {
-        let runes = HashMap::<SigilCoordinate, Rune>::new();
+        let runes = HashMap::<SigilCoordinate, Sigil>::new();
         let puzzle = Puzzle {
-            runes,
+            sigils: runes,
             lines: vec![],
             cursor: SigilCoordinate::zeros(),
         };

@@ -1,87 +1,87 @@
 cursor = [0, 0]
 
-[runes."2 1"]
-sigil = "Sigma"
+[sigils."2 1"]
+rune = "Sigma"
 orb = "Circle"
 
-[runes."0 0"]
-sigil = "Alpha"
+[sigils."0 0"]
+rune = "Alpha"
 orb = "Circle"
 
-[runes."-1 1"]
-sigil = "Phi"
+[sigils."-1 1"]
+rune = "Phi"
 orb = "Circle"
 
-[runes."-1 -1"]
-sigil = "Phi"
+[sigils."-1 -1"]
+rune = "Phi"
 orb = "Circle"
 
-[runes."1 1"]
-sigil = "Phi"
+[sigils."1 1"]
+rune = "Phi"
 orb = "Circle"
 
-[runes."2 -1"]
-sigil = "Sigma"
+[sigils."2 -1"]
+rune = "Sigma"
 orb = "Circle"
 
-[runes."0 2"]
-sigil = "Alpha"
+[sigils."0 2"]
+rune = "Alpha"
 orb = "Diamond"
 
-[runes."0 1"]
-sigil = "Phi"
+[sigils."0 1"]
+rune = "Phi"
 orb = "Circle"
 
-[runes."-2 1"]
-sigil = "Sigma"
+[sigils."-2 1"]
+rune = "Sigma"
 orb = "Circle"
 
-[runes."-2 0"]
-sigil = "Alpha"
+[sigils."-2 0"]
+rune = "Alpha"
 orb = "Diamond"
 
-[runes."0 -2"]
-sigil = "Alpha"
+[sigils."0 -2"]
+rune = "Alpha"
 orb = "Diamond"
 
-[runes."1 0"]
-sigil = "Phi"
+[sigils."1 0"]
+rune = "Phi"
 orb = "Circle"
 
-[runes."-1 2"]
-sigil = "Sigma"
+[sigils."-1 2"]
+rune = "Sigma"
 orb = "Circle"
 
-[runes."1 2"]
-sigil = "Sigma"
+[sigils."1 2"]
+rune = "Sigma"
 orb = "Circle"
 
-[runes."0 -1"]
-sigil = "Phi"
+[sigils."0 -1"]
+rune = "Phi"
 orb = "Circle"
 
-[runes."2 0"]
-sigil = "Alpha"
+[sigils."2 0"]
+rune = "Alpha"
 orb = "Diamond"
 
-[runes."-1 -2"]
-sigil = "Sigma"
+[sigils."-1 -2"]
+rune = "Sigma"
 orb = "Circle"
 
-[runes."-1 0"]
-sigil = "Phi"
+[sigils."-1 0"]
+rune = "Phi"
 orb = "Circle"
 
-[runes."1 -2"]
-sigil = "Sigma"
+[sigils."1 -2"]
+rune = "Sigma"
 orb = "Circle"
 
-[runes."-2 -1"]
-sigil = "Sigma"
+[sigils."-2 -1"]
+rune = "Sigma"
 orb = "Circle"
 
-[runes."1 -1"]
-sigil = "Phi"
+[sigils."1 -1"]
+rune = "Phi"
 orb = "Circle"
 
 [[lines]]

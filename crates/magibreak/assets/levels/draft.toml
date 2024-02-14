@@ -1,6 +1,6 @@
 lines = []
 cursor = [0, 0]
 
-[runes."0 0"]
-sigil = "Alpha"
+[sigils."0 0"]
+rune = "Alpha"
 orb = "Circle"

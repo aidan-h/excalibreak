@@ -58,7 +58,7 @@ pub struct LevelEditor {
     delete_rx: Option<oneshot::Receiver<Result<(), String>>>,
     load_rx: Option<oneshot::Receiver<Result<Puzzle, String>>>,
     line_start: Option<SigilCoordinate>,
-    rune: Rune,
+    rune: Sigil,
 }
 
 const LEVELS_PATH: &str = "./assets/levels/";
@@ -75,8 +75,8 @@ impl LevelEditor {
             levels_rx: None,
             delete_rx: None,
             line_start: None,
-            rune: Rune {
-                sigil: Sigil::Alpha,
+            rune: Sigil {
+                rune: Rune::Alpha,
                 orb: Orb::Circle,
             },
         };
@@ -245,7 +245,7 @@ impl LevelEditor {
             if self.mode == LevelEditorMode::Place {
                 ui.horizontal(|ui| {
                     ui.label("Sigil");
-                    if ui.button(self.rune.sigil.to_string()).clicked() {
+                    if ui.button(self.rune.rune.to_string()).clicked() {
                         self.change_sigil();
                     }
                 });
@@ -315,7 +315,7 @@ impl LevelEditor {
                 self.loaded_puzzle.cursor = coordinate;
             }
             LevelEditorMode::Clear => {
-                self.loaded_puzzle.runes.remove(&coordinate);
+                self.loaded_puzzle.sigils.remove(&coordinate);
                 // crappy ui ik but don't care rn
                 let mut new_lines = Vec::<Line>::new();
                 for line in self.loaded_puzzle.lines.iter() {
@@ -326,7 +326,7 @@ impl LevelEditor {
                 self.loaded_puzzle.lines = new_lines;
             }
             LevelEditorMode::Place => {
-                self.loaded_puzzle.runes.insert(coordinate, self.rune);
+                self.loaded_puzzle.sigils.insert(coordinate, self.rune);
             }
             LevelEditorMode::Lines => match self.line_start {
                 Some(start) => {
@@ -369,11 +369,11 @@ impl LevelEditor {
     }
 
     fn change_sigil(&mut self) {
-        self.rune.sigil = match self.rune.sigil {
-            Sigil::Alpha => Sigil::Sigma,
-            Sigil::Sigma => Sigil::Phi,
-            Sigil::Phi => Sigil::Delta,
-            Sigil::Delta => Sigil::Alpha,
+        self.rune.rune = match self.rune.rune {
+            Rune::Alpha => Rune::Sigma,
+            Rune::Sigma => Rune::Phi,
+            Rune::Phi => Rune::Delta,
+            Rune::Delta => Rune::Alpha,
         };
     }
 
@@ -404,7 +404,7 @@ impl LevelEditor {
                     SpriteBatch {
                         sprites: vec![Sprite {
                             transform,
-                            texture_coordinate: self.rune.sigil.texture_coordinate(),
+                            texture_coordinate: self.rune.rune.texture_coordinate(),
                             color: Color::new(1.0, 1.0, 1.0, 0.8),
                         }],
                         texture_bind_group: sigils_texture,
