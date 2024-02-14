@@ -1,14 +1,15 @@
+use crate::level_editor::*;
 use crate::puzzle::*;
 use excali_input::*;
 use excali_render::*;
 use excali_sprite::*;
-use excali_ui::egui_winit::egui;
 use excali_ui::*;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt};
 use winit::event_loop::EventLoop;
 
-pub mod puzzle;
+mod level_editor;
+mod puzzle;
 
 const STACK_SIZE: usize = 10_000_000;
 
@@ -38,101 +39,6 @@ async fn load_level_file(name: &str) -> io::Result<String> {
     file.read_to_string(&mut contents).await?;
 
     Ok(contents)
-}
-
-#[derive(Eq, PartialEq)]
-enum LevelEditorMode {
-    Clear,
-    Cursor,
-    Place,
-}
-
-impl ToString for LevelEditorMode {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Clear => "Clear".to_string(),
-            Self::Cursor => "Cursor".to_string(),
-            Self::Place => "Place".to_string(),
-        }
-    }
-}
-
-struct LevelEditor {
-    enabled: bool,
-    mode: LevelEditorMode,
-    rune: Rune,
-}
-
-impl Default for LevelEditor {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            mode: LevelEditorMode::Place,
-            rune: Rune {
-                sigil: Sigil::Alpha,
-                orb: Orb::Circle,
-            },
-        }
-    }
-}
-
-impl LevelEditor {
-    fn toggle(&mut self) {
-        self.enabled = !self.enabled;
-    }
-
-    fn change_mode(&mut self) {
-        self.mode = match self.mode {
-            LevelEditorMode::Clear => LevelEditorMode::Cursor,
-            LevelEditorMode::Cursor => LevelEditorMode::Place,
-            LevelEditorMode::Place => LevelEditorMode::Clear,
-        };
-    }
-
-    fn change_orb(&mut self) {
-        self.rune.orb = match self.rune.orb {
-            Orb::Circle => Orb::Diamond,
-            Orb::Diamond => Orb::Octogon,
-            Orb::Octogon => Orb::Circle,
-        };
-    }
-
-    fn change_sigil(&mut self) {
-        self.rune.sigil = match self.rune.sigil {
-            Sigil::Alpha => Sigil::Sigma,
-            Sigil::Sigma => Sigil::Alpha,
-        };
-    }
-
-    fn sprite_batches<'a>(
-        &'a self,
-        mouse_coordinate: SigilCoordinate,
-        sigils_texture: &'a wgpu::BindGroup,
-        orbs_texture: &'a wgpu::BindGroup,
-    ) -> Option<Vec<SpriteBatch>> {
-        if self.enabled && self.mode == LevelEditorMode::Place {
-            let transform = Transform::from_sigil_coordinate(mouse_coordinate);
-            return Some(vec![
-                SpriteBatch {
-                    sprites: vec![Sprite {
-                        transform,
-                        texture_coordinate: self.rune.orb.texture_coordinate(false),
-                        color: Color::new(1.0, 1.0, 1.0, 0.8),
-                    }],
-                    texture_bind_group: orbs_texture,
-                },
-                SpriteBatch {
-                    sprites: vec![Sprite {
-                        transform,
-                        texture_coordinate: self.rune.sigil.texture_coordinate(),
-                        color: Color::new(1.0, 1.0, 1.0, 0.8),
-                    }],
-                    texture_bind_group: sigils_texture,
-                },
-            ]);
-        }
-        None
-    }
 }
 
 async fn game() {
@@ -178,6 +84,14 @@ async fn game() {
             .unwrap(),
     );
 
+    let border_texture = sprite_renderer.create_texture_bind_group(
+        &renderer.device,
+        &sampler,
+        &load_texture_from_file("assets/border.png", &renderer)
+            .await
+            .unwrap(),
+    );
+
     event_loop.run(move |event, _, control_flow| {
         input.handle_event(&event);
         ui.handle_event(&event, renderer.window.id());
@@ -196,37 +110,13 @@ async fn game() {
                     if !level_editor.enabled {
                         puzzle.input(&coordinate);
                     }
+                    level_editor.input(coordinate, &mut puzzle);
                 }
             }
 
             let ui_output = ui.update(
                 |ctx| {
-                    egui::Window::new("level editor").show(ctx, |ui| {
-                        if ui
-                            .button(if level_editor.enabled { "Play" } else { "Edit" })
-                            .clicked()
-                        {
-                            level_editor.toggle();
-                        }
-                        if level_editor.enabled {
-                            ui.label("Mode");
-                            if ui.button(level_editor.mode.to_string()).clicked() {
-                                level_editor.change_mode();
-                            }
-
-                            if level_editor.mode == LevelEditorMode::Place {
-                                ui.label("Sigil");
-                                if ui.button(level_editor.rune.sigil.to_string()).clicked() {
-                                    level_editor.change_sigil();
-                                }
-
-                                ui.label("Orb");
-                                if ui.button(level_editor.rune.orb.to_string()).clicked() {
-                                    level_editor.change_orb();
-                                }
-                            }
-                        }
-                    });
+                    level_editor.ui(ctx);
                 },
                 &renderer.device,
                 &renderer.queue,
@@ -238,9 +128,13 @@ async fn game() {
             let mut batches =
                 puzzle.sprite_batches(&cursor_texture, &sigils_texture, &orbs_texture);
             if let Some(coordinate) = mouse_coordinate {
-                if let Some(mut editor_batches) =
-                    level_editor.sprite_batches(coordinate, &sigils_texture, &orbs_texture)
-                {
+                if let Some(mut editor_batches) = level_editor.sprite_batches(
+                    coordinate,
+                    &cursor_texture,
+                    &sigils_texture,
+                    &orbs_texture,
+                    &border_texture,
+                ) {
                     for batch in editor_batches.drain(..) {
                         batches.push(batch);
                     }

@@ -8,7 +8,7 @@ use nalgebra::Vector2;
 
 const SIGIL_SIZE: f32 = 50.0;
 const SIGIL_SCALE: Vector2<f32> = Vector2::new(SIGIL_SIZE, SIGIL_SIZE);
-const CURSOR_SIZE: f32 = 70.0;
+pub const CURSOR_SIZE: f32 = 70.0;
 
 const SIGIL_DISTANCE: f32 = SIGIL_SIZE * 1.5;
 
@@ -191,9 +191,9 @@ fn line_between(start: Vector2<f32>, end: Vector2<f32>, thickness: f32) -> Trans
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
-struct Line {
-    start: SigilCoordinate,
-    end: SigilCoordinate,
+pub struct Line {
+    pub start: SigilCoordinate,
+    pub end: SigilCoordinate,
 }
 
 impl Line {
@@ -273,8 +273,8 @@ impl Line {
 #[derive(Clone)]
 pub struct Puzzle {
     pub runes: HashMap<SigilCoordinate, Rune>,
-    lines: Vec<Line>,
-    cursor: SigilCoordinate,
+    pub lines: Vec<Line>,
+    pub cursor: SigilCoordinate,
 }
 
 impl Default for Puzzle {
