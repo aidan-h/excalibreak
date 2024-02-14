@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::f32::consts::PI;
 use std::num::ParseIntError;
 
 use excali_sprite::*;
@@ -233,24 +234,6 @@ impl Coordinate for SigilCoordinate {
     }
 }
 
-fn line_between(start: Vector2<f32>, end: Vector2<f32>, thickness: f32) -> Transform {
-    let position = (start + end) / 2.0;
-    let direction = end - start;
-    let magnitude = direction.magnitude();
-
-    let rotation = if direction.x < 0.0 {
-        (direction.y / magnitude).asin()
-    } else {
-        (-direction.y / magnitude).asin()
-    };
-
-    Transform {
-        position,
-        rotation,
-        scale: Vector2::new(magnitude, thickness),
-    }
-}
-
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub struct Line {
     pub start: SigilCoordinate,
@@ -258,9 +241,31 @@ pub struct Line {
 }
 
 impl Line {
-    fn sprite(&self) -> Sprite {
+    fn sprite(&self, time: f32) -> Sprite {
+        let start = self.start.position();
+        let end = self.end.position();
+        let position = (start + end) / 2.0;
+        let direction = end - start;
+        let magnitude = direction.magnitude();
+
+        let rotation = if direction.x < 0.0 {
+            (direction.y / magnitude).asin() + PI
+        } else {
+            (-direction.y / magnitude).asin()
+        };
+
         Sprite {
-            transform: line_between(self.start.position(), self.end.position(), 10.0),
+            transform: Transform {
+                position,
+                rotation,
+                scale: Vector2::new(magnitude, SIGIL_SIZE),
+            },
+            texture_coordinate: TextureCoordinate {
+                height: 1.0,
+                x: -time,
+                y: 0.0,
+                width: magnitude / SIGIL_SIZE,
+            },
             ..Default::default()
         }
     }
@@ -419,9 +424,11 @@ impl Puzzle {
 
     pub fn sprite_batches<'a>(
         &'a self,
+        time: f32,
         cursor_texture: &'a wgpu::BindGroup,
         sigils_texture: &'a wgpu::BindGroup,
         orbs_texture: &'a wgpu::BindGroup,
+        line_texture: &'a wgpu::BindGroup,
     ) -> Vec<SpriteBatch> {
         let mut orb_sprites = Vec::<Sprite>::new();
         let mut sigil_sprites = Vec::<Sprite>::new();
@@ -449,22 +456,25 @@ impl Puzzle {
             });
         }
 
-        let mut circle_sprites: Vec<Sprite> = self.lines.iter().map(|line| line.sprite()).collect();
-        circle_sprites.push(Sprite {
-            transform: Transform {
-                scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
-                position: self.cursor.position(),
-                rotation: 0.0,
-            },
-            ..Default::default()
-        });
+        let lines = SpriteBatch {
+            sprites: self.lines.iter().map(|line| line.sprite(time)).collect(),
+            texture_bind_group: line_texture,
+        };
 
         let cursor = SpriteBatch {
-            sprites: circle_sprites,
+            sprites: vec![Sprite {
+                transform: Transform {
+                    scale: Vector2::new(CURSOR_SIZE, CURSOR_SIZE),
+                    position: self.cursor.position(),
+                    rotation: 0.0,
+                },
+                ..Default::default()
+            }],
             texture_bind_group: cursor_texture,
         };
 
         vec![
+            lines,
             cursor,
             SpriteBatch {
                 sprites: orb_sprites,

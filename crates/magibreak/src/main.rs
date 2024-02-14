@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::level_editor::*;
 use crate::puzzle::*;
 use excali_input::*;
@@ -62,6 +64,7 @@ async fn game() {
     let mut ui = UI::new(&renderer.device, &event_loop);
 
     let sampler = renderer.pixel_art_sampler();
+    let line_sampler = renderer.pixel_art_wrap_sampler();
 
     let orbs_texture = load_texture("assets/orbs.png", &sprite_renderer, &renderer, &sampler).await;
     let border_texture =
@@ -70,6 +73,14 @@ async fn game() {
         load_texture("assets/sigils.png", &sprite_renderer, &renderer, &sampler).await;
     let cursor_texture =
         load_texture("assets/cursor.png", &sprite_renderer, &renderer, &sampler).await;
+    let line_texture = load_texture(
+        "assets/line.png",
+        &sprite_renderer,
+        &renderer,
+        &line_sampler,
+    )
+    .await;
+    let start_instant = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
         input.handle_event(&event, ui.handle_event(&event, renderer.window.id()));
@@ -105,8 +116,18 @@ async fn game() {
                 [renderer.size.width, renderer.size.height],
             );
 
-            let mut batches =
-                puzzle.sprite_batches(&cursor_texture, &sigils_texture, &orbs_texture);
+            let time = renderer
+                .last_frame
+                .duration_since(start_instant)
+                .as_secs_f32();
+
+            let mut batches = puzzle.sprite_batches(
+                time,
+                &cursor_texture,
+                &sigils_texture,
+                &orbs_texture,
+                &line_texture,
+            );
             if let Some(coordinate) = mouse_coordinate {
                 if let Some(mut editor_batches) = level_editor.sprite_batches(
                     coordinate,
