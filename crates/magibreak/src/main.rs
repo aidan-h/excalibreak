@@ -42,6 +42,10 @@ impl Sigil {
         }
     }
 
+    fn allow_intersections(&self) -> bool {
+        false
+    }
+
     fn active(&self, coordinate: SigilCoordinate, lines: &[Line]) -> bool {
         for line in lines.iter() {
             for touching_coordinate in line.coordinates().iter() {
@@ -114,6 +118,7 @@ fn line_between(start: Vector2<f32>, end: Vector2<f32>, thickness: f32) -> Trans
     }
 }
 
+#[derive(Debug)]
 struct Line {
     start: SigilCoordinate,
     end: SigilCoordinate,
@@ -124,6 +129,47 @@ impl Line {
         Sprite {
             transform: line_between(self.start.position(), self.end.position(), 40.0),
             texture_coordinate: Default::default(),
+        }
+    }
+
+    fn cross(a: &Position, b: &Position) -> f32 {
+        a.x * b.y - a.y * b.x
+    }
+
+    fn intersects(&self, other: &Self) -> bool {
+        // endpoints are not considered
+        if (self.start == other.start && self.end != other.end)
+            || (self.start == other.end && self.end != other.start)
+            || (self.end == other.start && self.start != other.end)
+            || (self.end == other.end && self.start != other.start)
+        {
+            return false;
+        }
+
+        // see https://stackoverflow.com/a/565282 & ucarion/line_intersection
+        let p = Position::new(self.start.x as f32, self.start.y as f32);
+        let q = Position::new(other.start.x as f32, other.start.y as f32);
+        let r = Position::new(self.end.x as f32, self.end.y as f32) - p;
+        let s = Position::new(other.end.x as f32, other.end.y as f32) - q;
+
+        let r_cross_s = Self::cross(&r, &s);
+        let q_minus_p = q - p;
+        let q_minus_p_cross_r = Self::cross(&q_minus_p, &r);
+
+        // are the lines are parallel?
+        if r_cross_s == 0.0 {
+            // are the lines collinear?
+            q_minus_p_cross_r == 0.0
+        } else {
+            // the lines are not parallel
+            let t = Self::cross(&q_minus_p, &(s / r_cross_s));
+            let u = Self::cross(&q_minus_p, &(r / r_cross_s));
+
+            // are the intersection coordinates both in range?
+            let t_in_range = (0.0..=1.0).contains(&t);
+            let u_in_range = (0.0..=1.0).contains(&u);
+
+            t_in_range && u_in_range
         }
     }
 
@@ -173,13 +219,30 @@ impl Puzzle {
         if *coordinate == self.cursor {
             return;
         }
-        if let Some(_sigil) = self.sigils.get(coordinate) {
-            self.lines.push(Line {
+        if let Some(cursor_sigil) = self.sigils.get(&self.cursor) {
+            let line = Line {
                 start: self.cursor,
                 end: *coordinate,
-            });
-            self.cursor = *coordinate;
+            };
+
+            if !cursor_sigil.allow_intersections() && self.intersects_lines(&line) {
+                return;
+            }
+
+            if let Some(_sigil) = self.sigils.get(coordinate) {
+                self.lines.push(line);
+                self.cursor = *coordinate;
+            }
         }
+    }
+
+    fn intersects_lines(&self, line: &Line) -> bool {
+        for other_line in self.lines.iter() {
+            if other_line.intersects(line) {
+                return true;
+            }
+        }
+        false
     }
 
     fn sprite_batches<'a>(
