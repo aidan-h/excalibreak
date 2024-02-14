@@ -1,5 +1,5 @@
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{DeviceId, Event, MouseButton, WindowEvent};
+use winit::event::{DeviceId, ElementState, Event, MouseButton, WindowEvent};
 use winit::window::WindowId;
 
 #[derive(Copy, Clone)]
@@ -14,12 +14,47 @@ impl MousePosition {
     }
 }
 
+#[derive(Eq, PartialEq)]
+pub enum InputState {
+    Pressed,
+    JustPressed,
+    Released,
+    JustReleased,
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        InputState::Released
+    }
+}
+
+impl InputState {
+    fn step(&mut self) {
+        match self {
+            InputState::JustPressed => *self = InputState::Pressed,
+            InputState::JustReleased => *self = InputState::Released,
+            _ => {}
+        };
+    }
+
+    fn update(&mut self, state: &ElementState) {
+        *self = match *state {
+            ElementState::Pressed => InputState::JustPressed,
+            ElementState::Released => InputState::JustReleased,
+        };
+    }
+
+    pub fn pressed(&self) -> bool {
+        matches!(*self, InputState::Pressed | InputState::JustPressed)
+    }
+}
+
 pub struct Input {
     pub mouse_position: Option<MousePosition>,
     pub window_id: WindowId,
-    pub left_mouse_click: bool,
-    pub right_mouse_click: bool,
-    pub middle_mouse_click: bool,
+    pub left_mouse_click: InputState,
+    pub right_mouse_click: InputState,
+    pub middle_mouse_click: InputState,
     cursor_device_id: Option<DeviceId>,
 }
 
@@ -27,18 +62,18 @@ impl Input {
     pub fn new(window_id: WindowId) -> Self {
         Self {
             mouse_position: None,
-            left_mouse_click: false,
-            right_mouse_click: false,
-            middle_mouse_click: false,
+            left_mouse_click: Default::default(),
+            right_mouse_click: Default::default(),
+            middle_mouse_click: Default::default(),
             window_id,
             cursor_device_id: None,
         }
     }
 
     pub fn clear(&mut self) {
-        self.left_mouse_click = false;
-        self.right_mouse_click = false;
-        self.middle_mouse_click = false;
+        self.left_mouse_click.step();
+        self.right_mouse_click.step();
+        self.middle_mouse_click.step();
     }
 
     pub fn handle_event<T>(&mut self, event: &Event<T>)
@@ -51,13 +86,16 @@ impl Input {
             }
             match event {
                 WindowEvent::MouseInput {
-                    device_id, button, ..
+                    device_id,
+                    button,
+                    state,
+                    ..
                 } => {
                     if Some(*device_id) == self.cursor_device_id {
                         match button {
-                            MouseButton::Left => self.left_mouse_click = true,
-                            MouseButton::Right => self.right_mouse_click = true,
-                            MouseButton::Middle => self.middle_mouse_click = true,
+                            MouseButton::Left => self.left_mouse_click.update(state),
+                            MouseButton::Right => self.right_mouse_click.update(state),
+                            MouseButton::Middle => self.middle_mouse_click.update(state),
                             _ => {}
                         }
                     }

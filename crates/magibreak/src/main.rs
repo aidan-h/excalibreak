@@ -172,7 +172,7 @@ async fn game() {
         input.handle_event(&event);
 
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
-            if input.left_mouse_click {
+            if input.left_mouse_click == InputState::JustPressed {
                 if let Some(mouse_position) = input.mouse_position {
                     if let Some(sigil) = puzzle.get_sigil_mut(&SigilCoordinate::from_position(
                         mouse_position.world_position(&renderer.size).into(),
