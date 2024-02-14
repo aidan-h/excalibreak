@@ -1,0 +1,69 @@
+cursor = [0, 0]
+
+[runes."0 0"]
+sigil = "Sigma"
+orb = "Diamond"
+
+[runes."0 2"]
+sigil = "Alpha"
+orb = "Circle"
+
+[runes."-2 0"]
+sigil = "Alpha"
+orb = "Circle"
+
+[runes."2 -2"]
+sigil = "Alpha"
+orb = "Diamond"
+
+[runes."-2 -2"]
+sigil = "Alpha"
+orb = "Circle"
+
+[runes."0 -2"]
+sigil = "Alpha"
+orb = "Circle"
+
+[runes."2 2"]
+sigil = "Alpha"
+orb = "Circle"
+
+[runes."-2 2"]
+sigil = "Alpha"
+orb = "Diamond"
+
+[runes."2 0"]
+sigil = "Alpha"
+orb = "Circle"
+
+[[lines]]
+start = [1, 2]
+end = [1, -2]
+
+[[lines]]
+start = [-1, 2]
+end = [-1, -2]
+
+[[lines]]
+start = [-2, -1]
+end = [2, -1]
+
+[[lines]]
+start = [2, 1]
+end = [-2, 1]
+
+[[lines]]
+start = [1, -2]
+end = [1, 2]
+
+[[lines]]
+start = [-2, 1]
+end = [2, 1]
+
+[[lines]]
+start = [-1, -2]
+end = [-1, 2]
+
+[[lines]]
+start = [2, -1]
+end = [-2, -1]

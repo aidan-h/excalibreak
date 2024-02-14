@@ -1,38 +1,6 @@
 lines = []
 cursor = [0, 0]
 
-[runes."-2 -2"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."-2 0"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."1 0"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."0 -2"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."-1 -1"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."2 -1"]
-sigil = "Alpha"
-orb = "Circle"
-
 [runes."0 0"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."0 1"]
-sigil = "Alpha"
-orb = "Circle"
-
-[runes."2 2"]
 sigil = "Alpha"
 orb = "Circle"

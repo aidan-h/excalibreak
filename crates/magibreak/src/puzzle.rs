@@ -126,9 +126,9 @@ impl Sigil {
                 // true inside but not on a triangle (direction matters)
                 for line_a in lines.iter() {
                     for line_b in lines.iter() {
-                        if line_b.start == line_a.end {
+                        if line_a.extends(line_b) {
                             for line_c in lines.iter() {
-                                if line_c.start == line_b.end && line_c.end == line_a.start {
+                                if line_b.extends(line_c) && line_c.extends(line_a) {
                                     // triangle - directional
                                     let direction =
                                         orientation(line_a.start, line_a.end, line_b.end);
@@ -241,6 +241,25 @@ pub struct Line {
 }
 
 impl Line {
+    /// returns if the other line branches or extends from this
+    fn extends(&self, other: &Self) -> bool {
+        let self_coordinates = self.coordinates();
+        let mut coordinates = self_coordinates.iter();
+        coordinates.next();
+
+        let mut other_coordinates = other.coordinates();
+        other_coordinates.pop();
+
+        for coordinate in coordinates {
+            for other_coordinate in other_coordinates.iter() {
+                if coordinate == other_coordinate {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     fn sprite(&self, time: f32) -> Sprite {
         let start = self.start.position();
         let end = self.end.position();
