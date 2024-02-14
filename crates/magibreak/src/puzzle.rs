@@ -8,7 +8,7 @@ use excali_sprite::*;
 use gcd::Gcd;
 use nalgebra::Vector2;
 
-const SIGIL_DISTANCE: f32 = 20.0;
+const SIGIL_DISTANCE: f32 = 25.0;
 
 pub trait FromSigilCoordinate {
     fn from_sigil_coordinate(coordinate: SigilCoordinate, camera: &Transform) -> Self;
