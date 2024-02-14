@@ -233,6 +233,11 @@ impl Line {
         let q_minus_p = q - p;
         let q_minus_p_cross_r = Self::cross(&q_minus_p, &r);
 
+        // avoid reversals
+        if self.start == other.end && self.end == other.start {
+            return true;
+        }
+
         // endpoints are not considered except in parallel scenario
         if r_cross_s != 0.0 && ((self.start == other.start && self.end != other.end)
             || (self.start == other.end && self.end != other.start)
