@@ -445,8 +445,10 @@ impl ActivePuzzle {
     }
 
     pub fn input(&mut self, coordinate: &SigilCoordinate) {
-        self.history.push(self.puzzle.clone());
-        self.puzzle.input(coordinate);
+        let past = self.puzzle.clone();
+        if self.puzzle.input(coordinate) {
+            self.history.push(past);
+        }
     }
 
     pub fn sprite_batches<'a>(
@@ -487,9 +489,10 @@ impl Default for Puzzle {
 }
 
 impl Puzzle {
-    pub fn input(&mut self, coordinate: &SigilCoordinate) {
+    /// returns if the input does anything
+    pub fn input(&mut self, coordinate: &SigilCoordinate) -> bool {
         if *coordinate == self.cursor {
-            return;
+            return false;
         }
         if let Some(cursor_rune) = self.sigils.get(&self.cursor) {
             let line = Line {
@@ -498,18 +501,20 @@ impl Puzzle {
             };
 
             if !cursor_rune.orb.allow_intersections() && self.intersects_lines(&line) {
-                return;
+                return false;
             }
 
-            if let Some(_rune) = self.sigils.get(coordinate) {
+            if self.sigils.get(coordinate).is_some() {
                 cursor_rune
                     .orb
                     .effect(self.cursor, *coordinate, &mut self.lines);
 
                 self.lines.push(line);
                 self.cursor = *coordinate;
+                return true;
             }
         }
+        false
     }
 
     fn intersects_lines(&self, line: &Line) -> bool {
