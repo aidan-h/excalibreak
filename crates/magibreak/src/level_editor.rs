@@ -121,7 +121,7 @@ impl LevelEditor {
         });
     }
 
-    pub fn ui(&mut self, ctx: &Context, puzzle: &mut Puzzle) {
+    pub fn ui(&mut self, ctx: &Context, puzzle: &mut ActivePuzzle) {
         if let Some(rx) = self.delete_rx.as_mut() {
             if let Ok(val) = rx.try_recv() {
                 match val {
@@ -166,7 +166,7 @@ impl LevelEditor {
                             match new_puzzle {
                                 Ok(new_puzzle) => {
                                     self.loaded_puzzle = new_puzzle.clone();
-                                    *puzzle = new_puzzle;
+                                    puzzle.load_puzzle(new_puzzle);
                                 }
                                 Err(err) => error!("{err}"),
                             };
@@ -306,7 +306,7 @@ impl LevelEditor {
         });
     }
 
-    pub fn input(&mut self, coordinate: SigilCoordinate, puzzle: &mut Puzzle) {
+    pub fn input(&mut self, coordinate: SigilCoordinate, puzzle: &mut ActivePuzzle) {
         if !self.enabled {
             return;
         }
@@ -343,12 +343,12 @@ impl LevelEditor {
                 }
             },
         };
-        *puzzle = self.loaded_puzzle.clone();
+        puzzle.load_puzzle(self.loaded_puzzle.clone());
     }
 
-    fn toggle(&mut self, puzzle: &mut Puzzle) {
+    fn toggle(&mut self, puzzle: &mut ActivePuzzle) {
         self.enabled = !self.enabled;
-        *puzzle = self.loaded_puzzle.clone();
+        puzzle.load_puzzle(self.loaded_puzzle.clone());
     }
 
     fn change_mode(&mut self) {

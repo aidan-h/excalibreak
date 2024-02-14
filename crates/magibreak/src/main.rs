@@ -45,6 +45,25 @@ async fn load_texture(
         &load_texture_from_file(path, renderer).await.unwrap(),
     )
 }
+
+struct Actions {
+    undo: Action,
+}
+
+impl Default for Actions {
+    fn default() -> Self {
+        Self {
+            undo: Action::new(winit::event::VirtualKeyCode::U),
+        }
+    }
+}
+
+impl InputMap for Actions {
+    fn actions(&mut self) -> Vec<&mut Action> {
+        vec![&mut self.undo]
+    }
+}
+
 async fn game() {
     env_logger::init();
 
@@ -58,9 +77,9 @@ async fn game() {
     );
 
     let mut level_editor = LevelEditor::new("draft.toml".to_string()).await;
-    let mut puzzle = level_editor.loaded_puzzle.clone();
+    let mut puzzle = ActivePuzzle::new(level_editor.loaded_puzzle.clone());
 
-    let mut input = Input::new(renderer.window.id());
+    let mut input = Input::new(renderer.window.id(), Actions::default());
     let mut ui = UI::new(&renderer.device, &event_loop);
 
     let sampler = renderer.pixel_art_sampler();
@@ -84,7 +103,6 @@ async fn game() {
 
     event_loop.run(move |event, _, control_flow| {
         input.handle_event(&event, ui.handle_event(&event, renderer.window.id()));
-
         if let Err(err) = renderer.handle_event(&event, control_flow, |renderer, view| {
             let mouse_coordinate = if let Some(mouse_position) = input.mouse_position {
                 Some(SigilCoordinate::from_position(
@@ -93,6 +111,10 @@ async fn game() {
             } else {
                 None
             };
+
+            if input.input_map.undo.button.state == InputState::JustPressed {
+                puzzle.undo();
+            }
 
             if !input.left_mouse_click.consumed
                 && input.left_mouse_click.state == InputState::JustPressed

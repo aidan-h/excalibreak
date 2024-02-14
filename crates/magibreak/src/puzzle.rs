@@ -400,6 +400,56 @@ impl Line {
     }
 }
 
+/// The puzzle which the player interacts with
+pub struct ActivePuzzle {
+    puzzle: Puzzle,
+    history: Vec<Puzzle>,
+}
+
+impl ActivePuzzle {
+    pub fn new(puzzle: Puzzle) -> Self {
+        Self {
+            puzzle,
+            history: Vec::new(),
+        }
+    }
+
+    pub fn load_puzzle(&mut self, puzzle: Puzzle) {
+        self.puzzle = puzzle;
+        self.history.clear();
+    }
+
+    pub fn undo(&mut self) -> bool {
+        if let Some(new_puzzle) = self.history.pop() {
+            self.puzzle = new_puzzle;
+            return true;
+        }
+        false
+    }
+
+    pub fn input(&mut self, coordinate: &SigilCoordinate) {
+        self.history.push(self.puzzle.clone());
+        self.puzzle.input(coordinate);
+    }
+
+    pub fn sprite_batches<'a>(
+        &'a self,
+        time: f32,
+        cursor_texture: &'a wgpu::BindGroup,
+        sigils_texture: &'a wgpu::BindGroup,
+        orbs_texture: &'a wgpu::BindGroup,
+        line_texture: &'a wgpu::BindGroup,
+    ) -> Vec<SpriteBatch> {
+        self.puzzle.sprite_batches(
+            time,
+            cursor_texture,
+            sigils_texture,
+            orbs_texture,
+            line_texture,
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Puzzle {
     pub sigils: HashMap<SigilCoordinate, Sigil>,

@@ -1,5 +1,5 @@
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{DeviceId, ElementState, Event, MouseButton, WindowEvent};
+use winit::event::{DeviceId, ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::window::WindowId;
 
 #[derive(Copy, Clone)]
@@ -11,6 +11,24 @@ impl MousePosition {
             self.0.x as f32 - screen_size.width as f32 / 2.0,
             -self.0.y as f32 + screen_size.height as f32 / 2.0,
         ]
+    }
+}
+
+pub trait InputMap {
+    fn actions(&mut self) -> Vec<&mut Action>;
+}
+
+pub struct Action {
+    pub key_code: VirtualKeyCode,
+    pub button: Button,
+}
+
+impl Action {
+    pub fn new(key_code: VirtualKeyCode) -> Self {
+        Self {
+            key_code,
+            button: Default::default(),
+        }
     }
 }
 
@@ -63,22 +81,24 @@ impl InputState {
     }
 }
 
-pub struct Input {
+pub struct Input<T: InputMap> {
     pub mouse_position: Option<MousePosition>,
     pub window_id: WindowId,
     pub left_mouse_click: Button,
     pub right_mouse_click: Button,
     pub middle_mouse_click: Button,
+    pub input_map: T,
     cursor_device_id: Option<DeviceId>,
 }
 
-impl Input {
-    pub fn new(window_id: WindowId) -> Self {
+impl<M: InputMap> Input<M> {
+    pub fn new(window_id: WindowId, input_map: M) -> Input<M> {
         Self {
             mouse_position: None,
             left_mouse_click: Default::default(),
             right_mouse_click: Default::default(),
             middle_mouse_click: Default::default(),
+            input_map,
             window_id,
             cursor_device_id: None,
         }
@@ -88,6 +108,9 @@ impl Input {
         self.left_mouse_click.state.step();
         self.right_mouse_click.state.step();
         self.middle_mouse_click.state.step();
+        for action in self.input_map.actions().iter_mut() {
+            action.button.state.step();
+        }
     }
 
     pub fn handle_event<T>(&mut self, event: &Event<T>, consumed: bool)
@@ -135,6 +158,19 @@ impl Input {
                     }
                 }
                 _ => {}
+            }
+        } else if let Event::DeviceEvent {
+            event: winit::event::DeviceEvent::Key(input),
+            ..
+        } = event
+        {
+            if let Some(key) = input.virtual_keycode {
+                for action in self.input_map.actions().iter_mut() {
+                    if key != action.key_code {
+                        continue;
+                    }
+                    action.button.update(&input.state, consumed);
+                }
             }
         }
     }
