@@ -356,11 +356,7 @@ impl LevelEditor {
                 }])
             }
             LevelEditorMode::Cursor => {
-                let transform = Transform {
-                    position: mouse_coordinate.position(),
-                    rotation: 0.0,
-                    scale: camera.scale,
-                };
+                let transform = Transform::from_sigil_coordinate(mouse_coordinate, camera);
                 Some(vec![SpriteBatch {
                     sprites: vec![Sprite {
                         transform,
@@ -371,11 +367,7 @@ impl LevelEditor {
                 }])
             }
             LevelEditorMode::Lines => {
-                let transform = Transform {
-                    position: mouse_coordinate.position(),
-                    rotation: 0.0,
-                    scale: camera.scale,
-                };
+                let transform = Transform::from_sigil_coordinate(mouse_coordinate, camera);
                 let mut sprites = vec![Sprite {
                     transform,
                     color: Color::new(1.0, 1.0, 1.0, 0.6),
