@@ -41,6 +41,15 @@ async fn load_level_file(name: &str) -> io::Result<String> {
     Ok(contents)
 }
 
+async fn load_texture(path: &str, sprite_renderer: &SpriteRenderer, renderer: &Renderer, sampler: &wgpu::Sampler) -> wgpu::BindGroup {
+    sprite_renderer.create_texture_bind_group(
+        &renderer.device,
+        sampler,
+        &load_texture_from_file(path, renderer)
+            .await
+            .unwrap(),
+    )
+}
 async fn game() {
     let mut event_loop = EventLoop::new();
     let mut renderer = Renderer::new(&mut event_loop).await;
@@ -60,37 +69,11 @@ async fn game() {
     let mut ui = UI::new(&renderer.device, &event_loop);
 
     let sampler = renderer.pixel_art_sampler();
-    let orbs_texture = sprite_renderer.create_texture_bind_group(
-        &renderer.device,
-        &sampler,
-        &load_texture_from_file("assets/orbs.png", &renderer)
-            .await
-            .unwrap(),
-    );
 
-    let sigils_texture = sprite_renderer.create_texture_bind_group(
-        &renderer.device,
-        &sampler,
-        &load_texture_from_file("assets/sigils.png", &renderer)
-            .await
-            .unwrap(),
-    );
-
-    let cursor_texture = sprite_renderer.create_texture_bind_group(
-        &renderer.device,
-        &sampler,
-        &load_texture_from_file("assets/cursor.png", &renderer)
-            .await
-            .unwrap(),
-    );
-
-    let border_texture = sprite_renderer.create_texture_bind_group(
-        &renderer.device,
-        &sampler,
-        &load_texture_from_file("assets/border.png", &renderer)
-            .await
-            .unwrap(),
-    );
+    let orbs_texture = load_texture("assets/orbs.png", &sprite_renderer, &renderer, &sampler).await;
+    let border_texture = load_texture("assets/border.png", &sprite_renderer, &renderer, &sampler).await;
+    let sigils_texture = load_texture("assets/sigils.png", &sprite_renderer, &renderer, &sampler).await;
+    let cursor_texture = load_texture("assets/cursor.png", &sprite_renderer, &renderer, &sampler).await;
 
     event_loop.run(move |event, _, control_flow| {
         input.handle_event(&event, ui.handle_event(&event, renderer.window.id()));
