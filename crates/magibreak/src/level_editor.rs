@@ -40,13 +40,13 @@ impl Default for LevelEditor {
 }
 
 impl LevelEditor {
-    pub fn ui(&mut self, ctx: &Context) {
+    pub fn ui(&mut self, ctx: &Context, puzzle: &mut Puzzle, loaded_puzzle: &mut Puzzle) {
         egui::Window::new("level editor").show(ctx, |ui| {
             if ui
                 .button(if self.enabled { "Play" } else { "Edit" })
                 .clicked()
             {
-                self.toggle();
+                self.toggle(puzzle, loaded_puzzle);
             }
             if self.enabled {
                 ui.label("Mode");
@@ -69,19 +69,21 @@ impl LevelEditor {
         });
     }
 
-    pub fn input(&self, coordinate: SigilCoordinate, puzzle: &mut Puzzle ) {
+    pub fn input(&self, coordinate: SigilCoordinate, puzzle: &mut Puzzle, loaded_puzzle: &mut Puzzle ) {
         if !self.enabled {
             return;
         }
         match self.mode {
-            LevelEditorMode::Cursor => {puzzle.cursor = coordinate;},
-            LevelEditorMode::Clear => {puzzle.runes.remove(&coordinate);},
-            LevelEditorMode::Place => {puzzle.runes.insert(coordinate, self.rune);},
+            LevelEditorMode::Cursor => {loaded_puzzle.cursor = coordinate;},
+            LevelEditorMode::Clear => {loaded_puzzle.runes.remove(&coordinate);},
+            LevelEditorMode::Place => {loaded_puzzle.runes.insert(coordinate, self.rune);},
         };
+        *puzzle = loaded_puzzle.clone();
     }
 
-    fn toggle(&mut self) {
+    fn toggle(&mut self, puzzle: &mut Puzzle, loaded_puzzle: &mut Puzzle) {
         self.enabled = !self.enabled;
+        *puzzle = loaded_puzzle.clone();
     }
 
     fn change_mode(&mut self) {

@@ -63,6 +63,10 @@ async fn game() {
     let seriable_puzzle: SerialablePuzzle =
         toml::from_str(load_level_file("draft").await.unwrap().as_str()).unwrap();
     let mut puzzle = Puzzle::try_from(seriable_puzzle).unwrap();
+
+    // puzzle's original state
+    let mut loaded_puzzle = puzzle.clone();
+
     let mut level_editor = LevelEditor::default();
 
     let mut input = Input::new(renderer.window.id());
@@ -92,13 +96,13 @@ async fn game() {
                     if !level_editor.enabled {
                         puzzle.input(&coordinate);
                     }
-                    level_editor.input(coordinate, &mut puzzle);
+                    level_editor.input(coordinate, &mut puzzle, &mut loaded_puzzle);
                 }
             }
 
             let ui_output = ui.update(
                 |ctx| {
-                    level_editor.ui(ctx);
+                    level_editor.ui(ctx, &mut puzzle, &mut loaded_puzzle);
                 },
                 &renderer.device,
                 &renderer.queue,
