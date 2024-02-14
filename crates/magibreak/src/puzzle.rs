@@ -45,7 +45,7 @@ impl ToString for Orb {
 
 impl Orb {
     fn allow_intersections(&self) -> bool {
-        !matches!(self, Self::Circle)
+        *self == Self::Diamond
     }
 
     // TODO delete colinear lines, maybe

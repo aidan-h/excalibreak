@@ -55,7 +55,7 @@ async fn game() {
         renderer.size.height as f32,
     );
 
-    let mut level_editor = LevelEditor::new("draft".to_string()).await;
+    let mut level_editor = LevelEditor::new("draft.toml".to_string()).await;
     let mut puzzle = level_editor.loaded_puzzle.clone();
 
     let mut input = Input::new(renderer.window.id());

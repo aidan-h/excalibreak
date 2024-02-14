@@ -1,19 +1,46 @@
 [package]
 name = "magibreak"
-version = "0.1.0"
 edition = "2021"
+version = "0.1.0"
 
 [dependencies]
 env_logger = "0.10.0"
-excali_input = { version = "0.1.0", path = "../excali_input" }
-excali_render = { version = "0.1.0", path = "../excali_render" }
-excali_sprite = { version = "0.1.0", path = "../excali_sprite" }
-excali_ui = { version = "0.1.0", path = "../excali_ui" }
 gcd = "2.3.0"
 log = "0.4.17"
-nalgebra = { version = "0.32.1", default-features = false, features = ["serde-serialize"] }
-serde = { version = "1.0.152", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
 toml = "0.7.2"
 wgpu = "0.15.1"
 winit = "0.28.1"
+
+[dependencies.excali_input]
+version = "0.1.0"
+path = "../excali_input"
+features = []
+
+[dependencies.excali_render]
+version = "0.1.0"
+path = "../excali_render"
+features = []
+
+[dependencies.excali_sprite]
+version = "0.1.0"
+path = "../excali_sprite"
+features = []
+
+[dependencies.excali_ui]
+version = "0.1.0"
+path = "../excali_ui"
+features = []
+
+[dependencies.nalgebra]
+version = "0.32.1"
+features = ["serde-serialize", "std"]
+default-features = false
+
+[dependencies.serde]
+version = "1.0.152"
+features = ["derive"]
+
+[dependencies.tokio]
+version = "1"
+features = ["rt-multi-thread", "io-util", "fs", "sync"]
+default-features = false

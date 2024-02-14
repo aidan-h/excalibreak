@@ -5,8 +5,7 @@ use log::error;
 use nalgebra::Vector2;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::oneshot::error::TryRecvError;
-use tokio::sync::oneshot::Receiver;
+use tokio::sync::oneshot;
 
 #[derive(Eq, PartialEq)]
 enum LevelEditorMode {
@@ -27,7 +26,7 @@ impl ToString for LevelEditorMode {
 
 //TODO remove unwraps
 async fn load_puzzle(name: String) -> Result<Puzzle, String> {
-    match File::open(format!("{}{}.toml", LEVELS_PATH, name)).await {
+    match File::open(format!("{}{}", LEVELS_PATH, name)).await {
         Ok(mut file) => {
             let mut contents = String::new();
             file.read_to_string(&mut contents).await.unwrap();
@@ -51,30 +50,71 @@ pub struct LevelEditor {
     pub loaded_puzzle: Puzzle,
     file_name: String,
     mode: LevelEditorMode,
-    save_rx: Option<Receiver<Result<(), String>>>,
-    load_rx: Option<Receiver<Result<Puzzle, String>>>,
+    levels: Vec<String>,
+    levels_rx: Option<oneshot::Receiver<Result<Vec<String>, String>>>,
+    save_rx: Option<oneshot::Receiver<Result<(), String>>>,
+    load_rx: Option<oneshot::Receiver<Result<Puzzle, String>>>,
     rune: Rune,
 }
 
+const LEVELS_PATH: &str = "./assets/levels/";
 impl LevelEditor {
     pub async fn new(file_name: String) -> Self {
-        Self {
+        let mut editor = Self {
+            levels: Vec::new(),
             enabled: false,
             loaded_puzzle: load_puzzle(file_name.clone()).await.unwrap(),
             file_name,
             mode: LevelEditorMode::Place,
             save_rx: None,
             load_rx: None,
+            levels_rx: None,
             rune: Rune {
                 sigil: Sigil::Alpha,
                 orb: Orb::Circle,
             },
-        }
+        };
+        editor.load_levels();
+        editor
     }
-}
 
-const LEVELS_PATH: &str = "./assets/levels/";
-impl LevelEditor {
+    fn load_levels(&mut self) {
+        if self.levels_rx.is_some() {
+            return;
+        }
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.levels_rx = Some(rx);
+
+        tokio::spawn(async move {
+            tx.send(match tokio::fs::read_dir(LEVELS_PATH).await {
+                Err(err) => Err(err.to_string()),
+                Ok(mut dir) => {
+                    let mut entries = Vec::<String>::new();
+                    loop {
+                        match dir.next_entry().await {
+                            Err(err) => {
+                                return Err(err.to_string());
+                            }
+                            Ok(entry) => match entry {
+                                Some(entry) => {
+                                    entries.push(entry.file_name().to_str().unwrap().to_string());
+                                }
+                                None => {
+                                    break;
+                                }
+                            },
+                        }
+                    }
+                    Ok(entries)
+                }
+            })
+            .unwrap();
+            // no idea what I'm doing here
+            Ok(())
+        });
+    }
+
     pub fn ui(&mut self, ctx: &Context, puzzle: &mut Puzzle) {
         egui::Window::new("level editor").show(ctx, |ui| {
             if ui
@@ -111,41 +151,21 @@ impl LevelEditor {
                 match save_rx.try_recv() {
                     Ok(..) => {
                         self.save_rx = None;
+                        // refresh levels list
+                        self.load_levels();
                     }
                     Err(err) => match err {
-                        TryRecvError::Empty => {
+                        oneshot::error::TryRecvError::Empty => {
                             ui.label("Saving");
                         }
-                        TryRecvError::Closed => {
+                        oneshot::error::TryRecvError::Closed => {
                             self.save_rx = None;
                             error!("Save channel unexpectantly closed");
                         }
                     },
                 };
             } else if ui.button("Save").clicked() {
-                let string: String =
-                    toml::to_string(&SerialablePuzzle::from(self.loaded_puzzle.clone())).unwrap();
-                let file_name = self.file_name.clone();
-                let (tx, rx) = tokio::sync::oneshot::channel();
-                self.save_rx = Some(rx);
-
-                tokio::spawn(async move {
-                    match File::create(format!("{}{}.toml", LEVELS_PATH, file_name)).await {
-                        Ok(mut file) => {
-                            match file.write_all(string.as_bytes()).await {
-                                Ok(()) => {
-                                    tx.send(Ok(())).unwrap();
-                                }
-                                Err(err) => {
-                                    tx.send(Err(format!("{err}"))).unwrap();
-                                }
-                            };
-                        }
-                        Err(err) => {
-                            tx.send(Err(format!("{err}"))).unwrap();
-                        }
-                    }
-                });
+                self.save_level();
             }
 
             // loading
@@ -162,22 +182,84 @@ impl LevelEditor {
                         self.load_rx = None;
                     }
                     Err(err) => match err {
-                        TryRecvError::Closed => {
+                        oneshot::error::TryRecvError::Closed => {
                             self.load_rx = None;
                             error!("Puzzle load channel closed unexpectantly")
                         }
-                        TryRecvError::Empty => {}
+                        oneshot::error::TryRecvError::Empty => {}
                     },
                 }
             } else if ui.button("Load").clicked() {
-                let (tx, rx) = tokio::sync::oneshot::channel();
-                self.load_rx = Some(rx);
-
-                let file_name = self.file_name.clone();
-                tokio::spawn(async move {
-                    tx.send(load_puzzle(file_name).await).unwrap();
-                });
+                self.load_level();
             }
+
+            // levels
+            ui.label("Levels");
+            match self.levels_rx.as_mut() {
+                Some(levels_rx) => match levels_rx.try_recv() {
+                    Ok(levels) => {
+                        match levels {
+                            Ok(levels) => {
+                                self.levels = levels;
+                            }
+                            Err(err) => error!("{err}"),
+                        };
+                        self.levels_rx = None;
+                    }
+                    Err(err) => match err {
+                        oneshot::error::TryRecvError::Closed => {
+                            self.levels_rx = None;
+                            error!("Levels channel closed unexpectantly")
+                        }
+                        oneshot::error::TryRecvError::Empty => {}
+                    },
+                },
+                None => {
+                    for level in self.levels.iter() {
+                        if ui.button(level).clicked() {
+                            self.file_name = level.to_string();
+                            self.load_level();
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    fn save_level(&mut self) {
+        let string: String =
+            toml::to_string(&SerialablePuzzle::from(self.loaded_puzzle.clone())).unwrap();
+        let file_name = self.file_name.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.save_rx = Some(rx);
+
+        tokio::spawn(async move {
+            match File::create(format!("{}{}", LEVELS_PATH, file_name)).await {
+                Ok(mut file) => {
+                    match file.write_all(string.as_bytes()).await {
+                        Ok(()) => {
+                            tx.send(Ok(())).unwrap();
+                        }
+                        Err(err) => {
+                            tx.send(Err(format!("{err}"))).unwrap();
+                        }
+                    };
+                }
+                Err(err) => {
+                    tx.send(Err(format!("{err}"))).unwrap();
+                }
+            }
+        });
+    }
+
+    fn load_level(&mut self) {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.load_rx = Some(rx);
+
+        let file_name = self.file_name.clone();
+        tokio::spawn(async move {
+            tx.send(load_puzzle(file_name).await).unwrap();
         });
     }
 
